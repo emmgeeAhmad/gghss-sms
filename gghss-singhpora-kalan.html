@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GGHSS Singhpora Kalan · School Management System</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B3A5C">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GGHSS SMS">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#1B3A5C;
+    --navy-dark:#0F273D;
+    --saffron:#D68A2C;
+    --saffron-dark:#B06F1B;
+    --cream:#F6F1E4;
+    --paper:#FBF8F0;
+    --ink:#2A2A26;
+    --ink-soft:#5B564C;
+    --green:#2D6A4F;
+    --green-bg:#E4F0E9;
+    --red:#9C3B3B;
+    --red-bg:#F4E4E2;
+    --line:#DCD2B8;
+    --gold-line:#C79A4B;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--cream);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  h1,h2,h3,.display{font-family:'Fraunces','Lora',serif;}
+  ::selection{background:var(--saffron);color:#fff;}
+
+  /* ---------- Seal ---------- */
+  .seal{width:64px;height:64px;flex-shrink:0;}
+  .seal-sm{width:40px;height:40px;flex-shrink:0;}
+
+  /* ---------- Login ---------- */
+  .login-wrap{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(214,138,44,0.08), transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(27,58,92,0.10), transparent 40%),
+      var(--cream);
+    padding:24px;
+  }
+  .login-card{
+    background:var(--paper);
+    border:1px solid var(--line);
+    box-shadow:0 2px 0 var(--gold-line), 0 24px 60px -20px rgba(15,39,61,0.35);
+    border-radius:6px;
+    max-width:920px;width:100%;
+    display:flex;overflow:hidden;
+  }
+  .login-left{
+    background:var(--navy);
+    color:#F4EEDD;
+    flex:1.1;
+    padding:44px 36px;
+    display:flex;flex-direction:column;justify-content:space-between;
+    position:relative;
+  }
+  .login-left::after{
+    content:"";position:absolute;inset:10px;border:1px solid rgba(244,238,221,0.25);pointer-events:none;
+  }
+  .login-right{flex:1;padding:44px 40px;display:flex;flex-direction:column;justify-content:center;}
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--saffron);font-weight:600;}
+  .login-left .eyebrow{color:#E3B26A;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;letter-spacing:.02em;}
+  .field input,.field select{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:4px;
+    background:#fff;font-family:inherit;font-size:14px;color:var(--ink);
+  }
+  .field input:focus,.field select:focus{outline:2px solid var(--saffron);outline-offset:1px;border-color:var(--saffron);}
+  .role-tabs{display:flex;gap:8px;margin-bottom:18px;}
+  .role-tab{
+    flex:1;padding:10px 6px;text-align:center;border:1px solid var(--line);border-radius:4px;
+    background:#fff;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-soft);
+  }
+  .role-tab.active{background:var(--navy);border-color:var(--navy);color:#fff;}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:11px 18px;border-radius:4px;border:none;cursor:pointer;
+    font-family:inherit;font-weight:600;font-size:13.5px;letter-spacing:.01em;
+  }
+  .btn-primary{background:var(--saffron);color:#fff;}
+  .btn-primary:hover{background:var(--saffron-dark);}
+  .btn-navy{background:var(--navy);color:#fff;}
+  .btn-navy:hover{background:var(--navy-dark);}
+  .btn-outline{background:transparent;border:1px solid var(--line);color:var(--ink);}
+  .btn-outline:hover{border-color:var(--navy);}
+  .btn-danger{background:var(--red-bg);color:var(--red);}
+  .btn-danger:hover{background:#eccac6;}
+  .btn-block{width:100%;}
+  .err-box{background:var(--red-bg);color:var(--red);border:1px solid #E3B7B0;padding:9px 12px;border-radius:4px;font-size:13px;margin-bottom:14px;}
+  .demo-box{margin-top:22px;font-size:12px;color:var(--ink-soft);background:var(--cream);border:1px dashed var(--line);border-radius:4px;padding:10px 12px;line-height:1.6;}
+  .demo-box b{color:var(--ink);}
+
+  /* ---------- App shell ---------- */
+  .app{display:flex;min-height:100vh;}
+  .sidebar{
+    width:230px;flex-shrink:0;background:var(--navy);color:#EDE6D2;
+    display:flex;flex-direction:column;padding:22px 14px;
+  }
+  .sb-brand{display:flex;gap:10px;align-items:center;padding:0 6px 18px;border-bottom:1px solid rgba(237,230,210,0.18);margin-bottom:16px;}
+  .sb-brand .name{font-size:13.5px;font-weight:700;line-height:1.25;font-family:'Fraunces',serif;}
+  .sb-brand .loc{font-size:10.5px;color:#C9BE9E;letter-spacing:.04em;text-transform:uppercase;margin-top:2px;}
+  .sb-role{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#D68A2C;font-weight:700;padding:0 6px;margin-bottom:10px;}
+  .sb-link{
+    display:flex;align-items:center;gap:10px;padding:10px 10px;border-radius:4px;
+    color:#EDE6D2;text-decoration:none;font-size:13.5px;font-weight:500;cursor:pointer;margin-bottom:2px;
+  }
+  .sb-link:hover{background:rgba(255,255,255,0.06);}
+  .sb-link.active{background:var(--saffron);color:#fff;font-weight:700;}
+  .sb-spacer{flex:1;}
+  .sb-user{padding:10px;border-top:1px solid rgba(237,230,210,0.18);font-size:12px;}
+  .sb-user .u-name{font-weight:700;font-size:13px;}
+  .sb-user .u-role{color:#C9BE9E;font-size:11px;text-transform:uppercase;letter-spacing:.06em;}
+  .sb-logout{margin-top:8px;width:100%;}
+
+  .main{flex:1;min-width:0;}
+  .topbar{
+    background:var(--paper);border-bottom:1px solid var(--line);
+    padding:16px 28px;display:flex;align-items:center;justify-content:space-between;
+  }
+  .topbar h1{font-size:19px;margin:0;font-weight:700;}
+  .topbar .sub{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+  .content{padding:26px 28px 60px;max-width:1180px;}
+
+  /* ---------- Cards / stats ---------- */
+  .grid{display:grid;gap:16px;}
+  .grid-4{grid-template-columns:repeat(4,1fr);}
+  .grid-3{grid-template-columns:repeat(3,1fr);}
+  .grid-2{grid-template-columns:repeat(2,1fr);}
+  @media(max-width:900px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr 1fr;}}
+  .stat-card{
+    background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:18px;
+    border-top:3px solid var(--saffron);
+  }
+  .stat-card .num{font-family:'Fraunces',serif;font-size:30px;font-weight:700;color:var(--navy);}
+  .stat-card .lbl{font-size:12px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:22px;margin-bottom:20px;}
+  .panel h2{font-size:16px;margin:0 0 16px;padding-bottom:10px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+  .panel h2 .tag{font-size:10.5px;background:var(--green-bg);color:var(--green);padding:3px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+
+  /* ---------- Table (ledger look) ---------- */
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{
+    text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--ink-soft);border-bottom:2px solid var(--navy);padding:8px 10px;font-weight:700;
+  }
+  tbody td{padding:9px 10px;border-bottom:1px solid var(--line);}
+  tbody tr:nth-child(even){background:rgba(214,138,44,0.04);}
+  tbody tr:hover{background:rgba(27,58,92,0.05);}
+  .idx{color:var(--ink-soft);font-variant-numeric:tabular-nums;width:34px;}
+
+  .row-inline{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;}
+  .row-inline .field{margin-bottom:0;min-width:150px;}
+  .pill{padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;letter-spacing:.02em;}
+  .pill-present{background:var(--green-bg);color:var(--green);}
+  .pill-absent{background:var(--red-bg);color:var(--red);}
+  .toggle-att{border:1px solid var(--line);border-radius:20px;padding:4px 4px;display:inline-flex;gap:2px;background:#fff;}
+  .toggle-att button{border:none;background:transparent;padding:4px 12px;border-radius:16px;font-size:11.5px;font-weight:700;cursor:pointer;}
+  .toggle-att button.p-on{background:var(--green);color:#fff;}
+  .toggle-att button.a-on{background:var(--red);color:#fff;}
+
+  .empty{padding:36px 10px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
+  .empty b{display:block;color:var(--ink);font-size:14.5px;margin-bottom:4px;font-family:'Fraunces',serif;}
+
+  /* ---------- modal / cert overlay ---------- */
+  .modal-bg{position:fixed;inset:0;background:rgba(15,39,61,0.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
+  .modal{background:var(--paper);border-radius:6px;max-width:560px;width:100%;padding:26px;max-height:90vh;overflow:auto;}
+  .modal h3{margin-top:0;}
+
+  #certOverlay{position:fixed;inset:0;background:#fff;z-index:100;overflow:auto;display:none;}
+  .cert-toolbar{background:var(--navy);padding:12px 24px;display:flex;justify-content:flex-end;gap:10px;}
+  .cert-sheet{max-width:760px;margin:30px auto;padding:50px 56px;border:1px solid var(--line);position:relative;}
+  .cert-border{position:absolute;inset:14px;border:2px solid var(--gold-line);pointer-events:none;}
+  .cert-head{text-align:center;border-bottom:2px solid var(--navy);padding-bottom:14px;margin-bottom:26px;}
+  .cert-head .sch{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--navy);margin-top:8px;}
+  .cert-head .addr{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .cert-title{text-align:center;font-family:'Fraunces',serif;font-size:18px;letter-spacing:.06em;text-transform:uppercase;margin:18px 0 26px;text-decoration:underline;text-underline-offset:6px;}
+  .cert-body{font-size:14.5px;line-height:2;text-align:justify;}
+  .cert-foot{display:flex;justify-content:space-between;margin-top:60px;font-size:13px;}
+  @media print{
+    .no-print{display:none!important;}
+    #certOverlay{position:static;}
+    body *{visibility:hidden;}
+    #certOverlay, #certOverlay *{visibility:visible;}
+    #certOverlay{display:block!important;}
+  }
+
+  .link-btn{background:none;border:none;color:var(--navy);text-decoration:underline;cursor:pointer;font-size:13px;font-family:inherit;padding:0;}
+  .link-btn.danger{color:var(--red);}
+  textarea{font-family:inherit;}
+  .note{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="certOverlay"></div>
+
+<script>
+/* ======================= DATA LAYER ======================= */
+const SCHOOL_NAME = "Government Girls Higher Secondary School";
+const SCHOOL_LOC = "Singhpora Kalan";
+const CLASSES = ["1","2","3","4","5","6","7","8","9","10","11","12"];
+const SECTIONS = ["A","B"];
+const SUBJECTS = ["English","Urdu","Hindi","Mathematics","Science","Social Science","Environmental Studies","Computer Science","Physical Education"];
+const EXAMS = ["Unit Test 1","Unit Test 2","Half Yearly Examination","Unit Test 3","Annual Examination"];
+const CERT_TYPES = ["Bonafide Certificate","Transfer Certificate","Character Certificate","Provisional Certificate"];
+
+let DB = null;
+let session = null; // {id, username, role, name, ...}
+let route = "dashboard";
+let flashError = "";
+
+function seedDB(){
+  return {
+    users:[
+      {id:"u1", username:"principal", password:"principal123", role:"principal", name:"Dr Emm Gee Ahmad"},
+      {id:"u2", username:"teacher1", password:"teacher123", role:"teacher", name:"Mrs. Nusrat Jan", assignedClass:"9", assignedSection:"A", subject:"Science"},
+      {id:"u3", username:"office1", password:"office123", role:"office", name:"Mr. Bilal Ahmad (Office)"}
+    ],
+    students:[
+      {id:"s1", admissionNo:"GGHSS-2023-0001", name:"Aaliya Jan", fatherName:"Ghulam Nabi", motherName:"Shameema", dob:"2010-03-14", className:"9", section:"A", address:"Singhpora Kalan", contact:"9797000001", admissionDate:"2023-04-02", status:"active", username:"aaliya.jan", password:"student123"},
+      {id:"s2", admissionNo:"GGHSS-2023-0002", name:"Insha Bashir", fatherName:"Bashir Ahmad", motherName:"Rubeena", dob:"2010-07-22", className:"9", section:"A", address:"Singhpora Kalan", contact:"9797000002", admissionDate:"2023-04-02", status:"active", username:"insha.bashir", password:"student123"},
+      {id:"s3", admissionNo:"GGHSS-2023-0003", name:"Mehak Farooq", fatherName:"Farooq Ahmad", motherName:"Yasmeena", dob:"2009-11-05", className:"10", section:"A", address:"Singhpora Kalan", contact:"9797000003", admissionDate:"2022-04-05", status:"active", username:"mehak.farooq", password:"student123"}
+    ],
+    admissions:[
+      {id:"a1", name:"Mehak Farooq", fatherName:"Farooq Ahmad", className:"10", section:"A", date:"2022-04-05", status:"Admitted", studentId:"s3"}
+    ],
+    attendance:{},
+    marks:{},
+    certificates:[]
+  };
+}
+
+async function loadDB(){
+  try{
+    const raw = localStorage.getItem('school_db');
+    if(raw){ DB = JSON.parse(raw); }
+    else { DB = seedDB(); await saveDB(); }
+  }catch(e){
+    DB = seedDB();
+    await saveDB();
+  }
+}
+async function saveDB(){
+  try{ localStorage.setItem('school_db', JSON.stringify(DB)); }
+  catch(e){ console.error('Save failed', e); }
+}
+function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+
+/* ======================= HELPERS ======================= */
+function studentsOf(cls, sec){
+  return DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
+}
+function teacherStudents(u){
+  return studentsOf(u.assignedClass, u.assignedSection);
+}
+function esc(str){ return (str||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(d){ if(!d) return ''; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'}); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+function sealSVG(size){
+  return `<svg class="seal" viewBox="0 0 100 100" width="${size||64}" height="${size||64}">
+    <defs><path id="sealCirc" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0"/></defs>
+    <circle cx="50" cy="50" r="47" fill="none" stroke="#D68A2C" stroke-width="1.4"/>
+    <circle cx="50" cy="50" r="40" fill="none" stroke="#1B3A5C" stroke-width="2"/>
+    <circle cx="50" cy="50" r="30" fill="#F6F1E4" stroke="#1B3A5C" stroke-width="1"/>
+    <text font-family="Fraunces, serif" font-size="10" font-weight="700" fill="#1B3A5C" text-anchor="middle">
+      <textPath href="#sealCirc" startOffset="3%">GOVT. GIRLS H.S.S. • SINGHPORA KALAN •</textPath>
+    </text>
+    <text x="50" y="47" text-anchor="middle" font-family="Fraunces, serif" font-size="15" font-weight="700" fill="#1B3A5C">GG</text>
+    <text x="50" y="60" text-anchor="middle" font-family="Inter, sans-serif" font-size="7" fill="#B06F1B" letter-spacing="1">EST. LEARNING</text>
+  </svg>`;
+}
+
+/* ======================= RENDER ROOT ======================= */
+function render(){
+  const app = document.getElementById('app');
+  if(!session){ app.innerHTML = loginView(); attachLoginHandlers(); return; }
+  app.innerHTML = shellView();
+  attachShellHandlers();
+}
+
+/* ======================= LOGIN VIEW ======================= */
+let loginRole = "principal";
+let forgotOpen = false;
+function loginView(){
+  return `
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-left">
+        <div>
+          <div class="eyebrow">Jammu &amp; Kashmir · Government School</div>
+          <div style="display:flex;gap:14px;align-items:center;margin-top:16px;">
+            ${sealSVG(64)}
+            <div>
+              <div class="display" style="font-size:20px;font-weight:700;line-height:1.3;">${SCHOOL_NAME}</div>
+              <div style="font-size:13px;color:#D8CEB0;margin-top:2px;">${SCHOOL_LOC}</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:12.5px;line-height:1.8;color:#CFC5A6;margin-top:40px;">
+          <div style="border-top:1px solid rgba(244,238,221,.25);padding-top:16px;">
+            A single register for attendance, examinations, admissions and certificates —
+            kept the way this school has always kept its records, only faster.
+          </div>
+        </div>
+      </div>
+      <div class="login-right">
+        <div class="eyebrow" style="color:var(--saffron-dark);">Sign in</div>
+        <h1 style="margin:6px 0 20px;">School Management System</h1>
+        ${flashError ? `<div class="err-box">${esc(flashError)}</div>` : ''}
+        <div class="role-tabs">
+          ${["principal","teacher","office","student"].map(r=>`
+            <div class="role-tab ${r===loginRole?'active':''}" data-role="${r}">${r[0].toUpperCase()+r.slice(1)}</div>
+          `).join('')}
+        </div>
+        <form id="loginForm">
+          <div class="field"><label>Username</label><input type="text" id="loginUser" autocomplete="username" required></div>
+          <div class="field"><label>Password</label><input type="password" id="loginPass" autocomplete="current-password" required></div>
+          <button type="submit" class="btn btn-primary btn-block">Log in</button>
+        </form>
+        <div style="margin-top:10px;"><button class="link-btn" id="forgotBtn" type="button">Forgot password?</button></div>
+        ${forgotOpen ? `<div class="err-box" style="background:var(--cream);color:var(--ink-soft);border-color:var(--line);">
+          Students and staff: ask your class teacher, the school office, or the Principal to reset your password
+          for you from their panel. Principals: since this app stores data only in this browser, a password reset
+          needs someone with direct access to the app's records — there's no email-based recovery here.
+        </div>` : ''}
+        <div class="demo-box">
+          <b>Demo credentials</b><br>
+          Principal — <b>principal</b> / principal123<br>
+          Teacher — <b>teacher1</b> / teacher123<br>
+          Office — <b>office1</b> / office123<br>
+          Student — <b>aaliya.jan</b> / student123
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function attachLoginHandlers(){
+  document.querySelectorAll('.role-tab').forEach(t=>{
+    t.onclick = ()=>{ loginRole = t.dataset.role; render(); };
+  });
+  const forgotBtn = document.getElementById('forgotBtn');
+  if(forgotBtn) forgotBtn.onclick = ()=>{ forgotOpen = !forgotOpen; render(); };
+  document.getElementById('loginForm').onsubmit = (e)=>{
+    e.preventDefault();
+    const u = document.getElementById('loginUser').value.trim();
+    const p = document.getElementById('loginPass').value;
+    if(loginRole==='student'){
+      const foundStudent = DB.students.find(x=>x.status!=='left' && x.username===u && x.password===p);
+      if(foundStudent){ session = {...foundStudent, role:'student'}; flashError=""; route="dashboard"; render(); }
+      else{ flashError = "Incorrect username, password, or role selected."; render(); }
+      return;
+    }
+    const found = DB.users.find(x=>x.username===u && x.password===p && x.role===loginRole);
+    if(found){ session = found; flashError=""; route="dashboard"; render(); }
+    else{ flashError = "Incorrect username, password, or role selected."; render(); }
+  };
+}
+
+/* ======================= APP SHELL ======================= */
+function navLinksFor(role){
+  if(role==='principal') return [
+    ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],
+    ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"]
+  ];
+  if(role==='teacher') return [
+    ["dashboard","Dashboard"],["attendance","Attendance"],["marks","Marks"]
+  ];
+  if(role==='office') return [
+    ["dashboard","Dashboard"],["admissions","Admissions"],["students","Student Directory"],["certificates","Certificates"]
+  ];
+  return [ // student
+    ["dashboard","Dashboard"],["attendance","My Attendance"],["marks","My Marks"],["certificates","My Certificates"]
+  ];
+}
+function shellView(){
+  const links = navLinksFor(session.role);
+  return `
+  <div class="app">
+    <div class="sidebar">
+      <div class="sb-brand">
+        ${sealSVG(40)}
+        <div>
+          <div class="name">${SCHOOL_NAME}</div>
+          <div class="loc">${SCHOOL_LOC}</div>
+        </div>
+      </div>
+      <div class="sb-role">${session.role} panel</div>
+      ${links.map(([r,label])=>`<div class="sb-link ${route===r?'active':''}" data-route="${r}">${label}</div>`).join('')}
+      <div class="sb-spacer"></div>
+      <div class="sb-user">
+        <div class="u-name">${esc(session.name)}</div>
+        <div class="u-role">${esc(session.role)}</div>
+        <button class="btn btn-outline sb-logout" id="editProfileBtn" style="margin-bottom:6px;">Edit profile</button>
+        <button class="btn btn-outline sb-logout" id="changePwBtn" style="margin-bottom:6px;">Change password</button>
+        <button class="btn btn-outline sb-logout" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div>
+          <h1>${pageTitle()}</h1>
+          <div class="sub">${SCHOOL_NAME}, ${SCHOOL_LOC} — ${new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</div>
+        </div>
+      </div>
+      <div class="content" id="content">${routeView()}</div>
+    </div>
+  </div>
+  ${pwModalOpen ? changePwModal() : ''}
+  ${profileModalOpen ? editProfileModal() : ''}`;
+}
+function pageTitle(){
+  const isStudent = session.role==='student';
+  const map = {dashboard:"Dashboard", staff:"Manage Staff", students: session.role==='office'?"Student Directory":"Students",
+    attendance: isStudent?"My Attendance":"Attendance", marks: isStudent?"My Marks":"Marks",
+    admissions:"Admissions", certificates: isStudent?"My Certificates":"Certificates"};
+  return map[route] || "Dashboard";
+}
+let pwModalOpen = false;
+let pwError = "";
+let profileModalOpen = false;
+let profileError = "";
+function editProfileModal(){
+  return `
+  <div class="modal-bg" id="profileModalBg">
+    <div class="modal">
+      <h3>Edit profile</h3>
+      ${profileError ? `<div class="err-box">${esc(profileError)}</div>` : ''}
+      <div class="field"><label>Full name</label><input id="profName" value="${esc(session.name)}"></div>
+      <div class="note">Username (${esc(session.username)}) and role can't be changed here.</div>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn btn-primary" id="profSave">Save changes</button>
+        <button class="btn btn-outline" id="profCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function changePwModal(){
+  return `
+  <div class="modal-bg" id="pwModalBg">
+    <div class="modal">
+      <h3>Change password</h3>
+      ${pwError ? `<div class="err-box">${esc(pwError)}</div>` : ''}
+      <div class="field"><label>Current password</label><input type="password" id="pwCurrent" autocomplete="current-password"></div>
+      <div class="field"><label>New password</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+      <div class="field"><label>Confirm new password</label><input type="password" id="pwConfirm" autocomplete="new-password"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="pwSave">Save new password</button>
+        <button class="btn btn-outline" id="pwCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachShellHandlers(){
+  document.querySelectorAll('.sb-link').forEach(l=> l.onclick=()=>{ route=l.dataset.route; render(); });
+  document.getElementById('logoutBtn').onclick = ()=>{ session=null; route="dashboard"; render(); };
+  document.getElementById('changePwBtn').onclick = ()=>{ pwModalOpen=true; pwError=""; render(); };
+  document.getElementById('editProfileBtn').onclick = ()=>{ profileModalOpen=true; profileError=""; render(); };
+  const profCancel = document.getElementById('profCancel');
+  if(profCancel) profCancel.onclick = ()=>{ profileModalOpen=false; profileError=""; render(); };
+  const profSave = document.getElementById('profSave');
+  if(profSave) profSave.onclick = async ()=>{
+    const newName = document.getElementById('profName').value.trim();
+    if(!newName){ profileError = "Name can't be empty."; render(); return; }
+    const record = session.role==='student'
+      ? DB.students.find(s=>s.id===session.id)
+      : DB.users.find(u=>u.id===session.id);
+    if(record){ record.name = newName; }
+    session.name = newName;
+    await saveDB();
+    profileModalOpen = false; profileError = "";
+    render();
+  };
+  const cancel = document.getElementById('pwCancel');
+  if(cancel) cancel.onclick = ()=>{ pwModalOpen=false; pwError=""; render(); };
+  const save = document.getElementById('pwSave');
+  if(save) save.onclick = async ()=>{
+    const cur = document.getElementById('pwCurrent').value;
+    const next = document.getElementById('pwNew').value;
+    const confirmNext = document.getElementById('pwConfirm').value;
+    if(cur !== session.password){ pwError = "Current password is incorrect."; render(); return; }
+    if(!next || next.length < 6){ pwError = "New password must be at least 6 characters."; render(); return; }
+    if(next !== confirmNext){ pwError = "New password and confirmation don't match."; render(); return; }
+    const record = session.role==='student'
+      ? DB.students.find(s=>s.id===session.id)
+      : DB.users.find(u=>u.id===session.id);
+    if(record){ record.password = next; }
+    session.password = next;
+    await saveDB();
+    pwModalOpen = false; pwError = "";
+    render();
+    alert('Password changed successfully.');
+  };
+  attachRouteHandlers();
+}
+
+function routeView(){
+  if(route==='dashboard') return dashboardView();
+  if(route==='staff' && session.role==='principal') return staffView();
+  if(route==='students') return studentsView();
+  if(route==='attendance') return attendanceView();
+  if(route==='marks') return marksView();
+  if(route==='admissions') return admissionsView();
+  if(route==='certificates') return certificatesView();
+  return dashboardView();
+}
+function attachRouteHandlers(){
+  if(route==='dashboard') return;
+  if(route==='staff') return attachStaffHandlers();
+  if(route==='students') return attachStudentsHandlers();
+  if(route==='attendance') return attachAttendanceHandlers();
+  if(route==='marks') return attachMarksHandlers();
+  if(route==='admissions') return attachAdmissionsHandlers();
+  if(route==='certificates') return attachCertificatesHandlers();
+}
+
+/* ======================= DASHBOARD ======================= */
+function dashboardView(){
+  const totalStudents = DB.students.filter(s=>s.status!=='left').length;
+  const totalTeachers = DB.users.filter(u=>u.role==='teacher').length;
+  const totalStaff = DB.users.filter(u=>u.role!=='principal').length;
+  const today = todayISO();
+  let attToday = 0, presentToday = 0;
+  Object.keys(DB.attendance).forEach(key=>{
+    if(key.endsWith(today)){
+      const recs = DB.attendance[key];
+      attToday += Object.keys(recs).length;
+      presentToday += Object.values(recs).filter(v=>v==='P').length;
+    }
+  });
+  const pendingAdm = DB.admissions.filter(a=>a.status==='Pending').length;
+
+  if(session.role==='principal'){
+    return `
+    <div class="grid grid-4" style="margin-bottom:22px;">
+      <div class="stat-card"><div class="num">${totalStudents}</div><div class="lbl">Enrolled students</div></div>
+      <div class="stat-card"><div class="num">${totalTeachers}</div><div class="lbl">Teaching staff</div></div>
+      <div class="stat-card"><div class="num">${totalStaff}</div><div class="lbl">Total staff accounts</div></div>
+      <div class="stat-card"><div class="num">${DB.certificates.length}</div><div class="lbl">Certificates issued</div></div>
+    </div>
+    <div class="panel">
+      <h2>Welcome, ${esc(session.name)} <span class="tag">Full access</span></h2>
+      <p style="line-height:1.8;color:var(--ink-soft);font-size:13.5px;">
+        As Principal you can add or remove staff accounts, review and edit every student's record,
+        view attendance and marks entered by any teacher, and oversee admissions and certificates
+        issued by the office. Use the panel on the left to move between registers.
+      </p>
+      ${pendingAdm>0 ? `<p style="font-size:13.5px;"><b>${pendingAdm}</b> admission${pendingAdm>1?'s':''} awaiting review — see the Admissions register.</p>` : ''}
+    </div>`;
+  }
+  if(session.role==='teacher'){
+    const myStudents = teacherStudents(session);
+    return `
+    <div class="grid grid-3" style="margin-bottom:22px;">
+      <div class="stat-card"><div class="num">${myStudents.length}</div><div class="lbl">Students in Class ${session.assignedClass}-${session.assignedSection}</div></div>
+      <div class="stat-card"><div class="num">${session.subject||'—'}</div><div class="lbl">Subject charge</div></div>
+      <div class="stat-card"><div class="num">${presentToday}/${attToday||'—'}</div><div class="lbl">Marked present today (all classes)</div></div>
+    </div>
+    <div class="panel">
+      <h2>Welcome, ${esc(session.name)}</h2>
+      <p style="line-height:1.8;color:var(--ink-soft);font-size:13.5px;">
+        You are the class teacher for <b>Class ${session.assignedClass}-${session.assignedSection}</b>, teaching <b>${session.subject||'—'}</b>.
+        Use <b>Attendance</b> to mark today's roll call and <b>Marks</b> to record examination scores for your class.
+      </p>
+    </div>`;
+  }
+  if(session.role==='student'){
+    const student = DB.students.find(s=>s.id===session.id) || session;
+    const prefix = `${student.className}-${student.section}-`;
+    let present=0, marked=0;
+    Object.keys(DB.attendance).forEach(k=>{
+      if(k.startsWith(prefix)){
+        const v = DB.attendance[k][student.id];
+        if(v){ marked++; if(v==='P') present++; }
+      }
+    });
+    const attPct = marked ? Math.round(present/marked*100) : null;
+    const myCerts = DB.certificates.filter(c=>c.studentId===student.id).length;
+    return `
+    <div class="grid grid-3" style="margin-bottom:22px;">
+      <div class="stat-card"><div class="num">${attPct!==null ? attPct+'%' : '—'}</div><div class="lbl">Attendance recorded</div></div>
+      <div class="stat-card"><div class="num">${esc(student.className)}-${esc(student.section)}</div><div class="lbl">Current class</div></div>
+      <div class="stat-card"><div class="num">${myCerts}</div><div class="lbl">Certificates issued</div></div>
+    </div>
+    <div class="panel">
+      <h2>Welcome, ${esc(student.name)}</h2>
+      <p style="line-height:1.8;color:var(--ink-soft);font-size:13.5px;">
+        Admission No. <b>${esc(student.admissionNo)}</b> — Class ${esc(student.className)}-${esc(student.section)}.
+        Use <b>My Attendance</b> and <b>My Marks</b> on the left to review your records, and <b>My Certificates</b>
+        to view or print anything issued to you. If any details look wrong, please contact the school office.
+      </p>
+    </div>`;
+  }
+  // office
+  return `
+  <div class="grid grid-3" style="margin-bottom:22px;">
+    <div class="stat-card"><div class="num">${totalStudents}</div><div class="lbl">Enrolled students</div></div>
+    <div class="stat-card"><div class="num">${pendingAdm}</div><div class="lbl">Pending admissions</div></div>
+    <div class="stat-card"><div class="num">${DB.certificates.length}</div><div class="lbl">Certificates issued</div></div>
+  </div>
+  <div class="panel">
+    <h2>Welcome, ${esc(session.name)}</h2>
+    <p style="line-height:1.8;color:var(--ink-soft);font-size:13.5px;">
+      The office manages new admissions and issues certificates. Use <b>Admissions</b> to register a new student,
+      and <b>Certificates</b> to prepare a Bonafide, Transfer, Character or Provisional Certificate for printing.
+    </p>
+  </div>`;
+}
+
+/* ======================= STAFF (Principal only) ======================= */
+let staffFormOpen = false;
+function staffView(){
+  const staff = DB.users.filter(u=>u.role!=='principal');
+  return `
+  <div class="panel">
+    <h2>Staff accounts <button class="btn btn-primary" id="addStaffBtn">+ Add staff</button></h2>
+    ${staff.length===0 ? `<div class="empty"><b>No staff yet</b>Add teachers or office staff to get started.</div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Name</th><th>Username</th><th>Role</th><th>Assignment</th><th></th></tr></thead>
+      <tbody>
+        ${staff.map((u,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(u.name)}</td>
+            <td>${esc(u.username)}</td>
+            <td style="text-transform:capitalize;">${u.role}</td>
+            <td>${u.role==='teacher' ? `Class ${esc(u.assignedClass)}-${esc(u.assignedSection)} · ${esc(u.subject||'—')}` : '—'}</td>
+            <td><button class="link-btn" data-reset="${u.id}">Reset password</button> · <button class="link-btn danger" data-del="${u.id}">Remove</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  ${staffFormOpen ? staffFormModal() : ''}`;
+}
+function staffFormModal(){
+  return `
+  <div class="modal-bg" id="staffModalBg">
+    <div class="modal">
+      <h3>Add staff account</h3>
+      <div class="field"><label>Full name</label><input id="sfName" placeholder="e.g. Mrs. Farida Begum"></div>
+      <div class="row-inline">
+        <div class="field"><label>Username</label><input id="sfUser"></div>
+        <div class="field"><label>Password</label><input id="sfPass"></div>
+      </div>
+      <div class="field"><label>Role</label>
+        <select id="sfRole">
+          <option value="teacher">Teacher</option>
+          <option value="office">Office</option>
+        </select>
+      </div>
+      <div id="sfTeacherFields">
+        <div class="row-inline">
+          <div class="field"><label>Assigned class</label>
+            <select id="sfClass">${CLASSES.map(c=>`<option value="${c}">Class ${c}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Section</label>
+            <select id="sfSection">${SECTIONS.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="field"><label>Subject</label>
+          <select id="sfSubject">${SUBJECTS.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="sfSave">Save account</button>
+        <button class="btn btn-outline" id="sfCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachStaffHandlers(){
+  const addBtn = document.getElementById('addStaffBtn');
+  if(addBtn) addBtn.onclick = ()=>{ staffFormOpen=true; render(); };
+  document.querySelectorAll('[data-del]').forEach(b=>{
+    b.onclick = async ()=>{
+      if(!confirm('Remove this staff account?')) return;
+      DB.users = DB.users.filter(u=>u.id!==b.dataset.del);
+      await saveDB(); render();
+    };
+  });
+  document.querySelectorAll('[data-reset]').forEach(b=>{
+    b.onclick = async ()=>{
+      const u = DB.users.find(x=>x.id===b.dataset.reset);
+      if(!u) return;
+      const newPass = prompt(`Enter a new password for ${u.name} (min 6 characters):`);
+      if(newPass===null) return;
+      if(newPass.length < 6){ alert('Password must be at least 6 characters.'); return; }
+      u.password = newPass;
+      await saveDB();
+      alert(`Password for ${u.name} has been reset.`);
+    };
+  });
+  const roleSel = document.getElementById('sfRole');
+  if(roleSel){
+    const toggle = ()=> document.getElementById('sfTeacherFields').style.display = roleSel.value==='teacher' ? 'block':'none';
+    roleSel.onchange = toggle; toggle();
+  }
+  const cancel = document.getElementById('sfCancel');
+  if(cancel) cancel.onclick = ()=>{ staffFormOpen=false; render(); };
+  const save = document.getElementById('sfSave');
+  if(save) save.onclick = async ()=>{
+    const name=document.getElementById('sfName').value.trim();
+    const username=document.getElementById('sfUser').value.trim();
+    const password=document.getElementById('sfPass').value;
+    const role=document.getElementById('sfRole').value;
+    if(!name||!username||!password){ alert('Please fill in name, username and password.'); return; }
+    if(DB.users.some(u=>u.username===username)){ alert('That username is already taken.'); return; }
+    const newUser = {id:uid('u'), username, password, role, name};
+    if(role==='teacher'){
+      newUser.assignedClass = document.getElementById('sfClass').value;
+      newUser.assignedSection = document.getElementById('sfSection').value;
+      newUser.subject = document.getElementById('sfSubject').value;
+    }
+    DB.users.push(newUser);
+    await saveDB();
+    staffFormOpen=false; render();
+  };
+}
+
+/* ======================= STUDENTS ======================= */
+let studentFilter = {className:'', q:''};
+let studentEditId = null;
+function studentsView(){
+  const canEdit = session.role==='principal' || session.role==='office';
+  let list = DB.students.filter(s=>s.status!=='left');
+  if(studentFilter.className) list = list.filter(s=>s.className===studentFilter.className);
+  if(studentFilter.q) list = list.filter(s=> s.name.toLowerCase().includes(studentFilter.q.toLowerCase()) || s.admissionNo.toLowerCase().includes(studentFilter.q.toLowerCase()));
+  const editing = studentEditId ? DB.students.find(s=>s.id===studentEditId) : null;
+
+  return `
+  <div class="panel">
+    <h2>Student register</h2>
+    <div class="row-inline">
+      <div class="field"><label>Class</label>
+        <select id="stuClassFilter"><option value="">All classes</option>${CLASSES.map(c=>`<option value="${c}" ${studentFilter.className===c?'selected':''}>Class ${c}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Search</label><input id="stuSearch" placeholder="Name or admission no." value="${esc(studentFilter.q)}"></div>
+    </div>
+    ${list.length===0 ? `<div class="empty"><b>No students found</b>Try a different class or search term.</div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Admission No.</th><th>Name</th><th>Class</th><th>Father's Name</th><th>Contact</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>
+        ${list.map((s,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(s.admissionNo)}</td>
+            <td>${esc(s.name)}</td>
+            <td>${esc(s.className)}-${esc(s.section)}</td>
+            <td>${esc(s.fatherName)}</td>
+            <td>${esc(s.contact)}</td>
+            ${canEdit ? `<td>
+              <button class="link-btn" data-edit="${s.id}">Edit</button>
+              ${session.role==='principal' ? ` · <button class="link-btn danger" data-remove="${s.id}">Remove</button>` : ''}
+            </td>`:''}
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  ${editing ? studentEditModal(editing) : ''}`;
+}
+function studentEditModal(s){
+  return `
+  <div class="modal-bg" id="stuModalBg">
+    <div class="modal">
+      <h3>Edit student — ${esc(s.name)}</h3>
+      <div class="row-inline">
+        <div class="field"><label>Full name</label><input id="seName" value="${esc(s.name)}"></div>
+        <div class="field"><label>Contact number</label><input id="seContact" value="${esc(s.contact)}"></div>
+      </div>
+      <div class="row-inline">
+        <div class="field"><label>Class</label><select id="seClass">${CLASSES.map(c=>`<option value="${c}" ${c===s.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Section</label><select id="seSection">${SECTIONS.map(x=>`<option ${x===s.section?'selected':''}>${x}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Address</label><input id="seAddress" value="${esc(s.address)}"></div>
+      <div class="row-inline">
+        <div class="field"><label>Student login username</label><input id="seUser" value="${esc(s.username||'')}"></div>
+        <div class="field"><label>Student login password</label><input id="sePass" value="${esc(s.password||'')}"></div>
+      </div>
+      <div class="note">Change these to reset the student's login. Leave as-is to keep their current credentials.</div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="seSave">Save changes</button>
+        <button class="btn btn-outline" id="seCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachStudentsHandlers(){
+  const cf = document.getElementById('stuClassFilter');
+  if(cf) cf.onchange = ()=>{ studentFilter.className=cf.value; render(); };
+  const sq = document.getElementById('stuSearch');
+  if(sq) sq.oninput = ()=>{ studentFilter.q=sq.value; render(); };
+  document.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{ studentEditId=b.dataset.edit; render(); });
+  document.querySelectorAll('[data-remove]').forEach(b=> b.onclick=async ()=>{
+    if(!confirm('Remove this student from active records?')) return;
+    const st = DB.students.find(x=>x.id===b.dataset.remove);
+    if(st) st.status='left';
+    await saveDB(); render();
+  });
+  const cancel = document.getElementById('seCancel');
+  if(cancel) cancel.onclick = ()=>{ studentEditId=null; render(); };
+  const save = document.getElementById('seSave');
+  if(save) save.onclick = async ()=>{
+    const s = DB.students.find(x=>x.id===studentEditId);
+    s.name = document.getElementById('seName').value.trim();
+    s.contact = document.getElementById('seContact').value.trim();
+    s.className = document.getElementById('seClass').value;
+    s.section = document.getElementById('seSection').value;
+    s.address = document.getElementById('seAddress').value.trim();
+    const newUser = document.getElementById('seUser').value.trim();
+    const newPass = document.getElementById('sePass').value;
+    if(newUser && DB.students.some(x=>x.id!==s.id && x.username===newUser)){
+      alert('That username is already taken by another student.'); return;
+    }
+    if(newUser) s.username = newUser;
+    if(newPass) s.password = newPass;
+    await saveDB();
+    studentEditId=null; render();
+  };
+}
+
+/* ======================= ATTENDANCE ======================= */
+let attState = {className:'', section:'', date: todayISO(), draft:{}};
+function attendanceView(){
+  if(session.role==='student'){
+    const student = DB.students.find(s=>s.id===session.id) || session;
+    const prefix = `${student.className}-${student.section}-`;
+    const rows = Object.keys(DB.attendance)
+      .filter(k=>k.startsWith(prefix) && DB.attendance[k][student.id])
+      .map(k=>({date:k.slice(prefix.length), status:DB.attendance[k][student.id]}))
+      .sort((a,b)=> b.date.localeCompare(a.date));
+    const presentCount = rows.filter(r=>r.status==='P').length;
+    return `
+    <div class="panel">
+      <h2>My attendance ${rows.length ? `<span class="tag">${presentCount}/${rows.length} present</span>` : ''}</h2>
+      ${rows.length===0 ? `<div class="empty"><b>No attendance recorded yet</b>Your class teacher marks attendance day by day.</div>` : `
+      <table>
+        <thead><tr><th class="idx">#</th><th>Date</th><th>Status</th></tr></thead>
+        <tbody>
+          ${rows.map((r,i)=>`
+            <tr>
+              <td class="idx">${i+1}</td>
+              <td>${fmtDate(r.date)}</td>
+              <td><span class="pill ${r.status==='P'?'pill-present':'pill-absent'}">${r.status==='P'?'Present':'Absent'}</span></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>`;
+  }
+  if(session.role==='teacher'){
+    attState.className = session.assignedClass; attState.section = session.assignedSection;
+  } else if(!attState.className){
+    attState.className = CLASSES[0]; attState.section = SECTIONS[0];
+  }
+  const key = `${attState.className}-${attState.section}-${attState.date}`;
+  const saved = DB.attendance[key] || {};
+  const roster = studentsOf(attState.className, attState.section);
+  const isTeacher = session.role==='teacher';
+
+  return `
+  <div class="panel">
+    <h2>Attendance register</h2>
+    <div class="row-inline">
+      ${isTeacher ? `<div class="field"><label>Class</label><input value="Class ${attState.className}-${attState.section}" disabled></div>` : `
+      <div class="field"><label>Class</label><select id="attClass">${CLASSES.map(c=>`<option value="${c}" ${c===attState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Section</label><select id="attSection">${SECTIONS.map(x=>`<option ${x===attState.section?'selected':''}>${x}</option>`).join('')}</select></div>
+      `}
+      <div class="field"><label>Date</label><input type="date" id="attDate" value="${attState.date}" max="${todayISO()}"></div>
+    </div>
+    ${roster.length===0 ? `<div class="empty"><b>No students in this class-section</b>Add students via Admissions first.</div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Admission No.</th><th>Name</th><th>Status</th></tr></thead>
+      <tbody>
+        ${roster.map((s,i)=>{
+          const cur = (key in attState.draft) ? attState.draft[key][s.id] : saved[s.id];
+          const status = cur || 'P';
+          return `<tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(s.admissionNo)}</td>
+            <td>${esc(s.name)}</td>
+            <td>
+              <div class="toggle-att" data-sid="${s.id}">
+                <button class="att-p ${status==='P'?'p-on':''}" data-val="P">Present</button>
+                <button class="att-a ${status==='A'?'a-on':''}" data-val="A">Absent</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:16px;display:flex;align-items:center;gap:14px;">
+      <button class="btn btn-primary" id="attSave">Save attendance</button>
+      <span class="note" id="attSavedNote">${key in DB.attendance ? 'Previously saved for this date.' : ''}</span>
+    </div>`}
+  </div>`;
+}
+function attachAttendanceHandlers(){
+  if(session.role==='student') return;
+  const cSel = document.getElementById('attClass');
+  if(cSel) cSel.onchange = ()=>{ attState.className=cSel.value; render(); };
+  const sSel = document.getElementById('attSection');
+  if(sSel) sSel.onchange = ()=>{ attState.section=sSel.value; render(); };
+  const dSel = document.getElementById('attDate');
+  if(dSel) dSel.onchange = ()=>{ attState.date=dSel.value; render(); };
+  const key = `${attState.className}-${attState.section}-${attState.date}`;
+  if(!attState.draft[key]) attState.draft[key] = {...(DB.attendance[key]||{})};
+  document.querySelectorAll('.toggle-att').forEach(tg=>{
+    tg.querySelectorAll('button').forEach(btn=>{
+      btn.onclick = ()=>{
+        attState.draft[key][tg.dataset.sid] = btn.dataset.val;
+        render();
+      };
+    });
+  });
+  const save = document.getElementById('attSave');
+  if(save) save.onclick = async ()=>{
+    const roster = studentsOf(attState.className, attState.section);
+    const record = {};
+    roster.forEach(s=> record[s.id] = attState.draft[key][s.id] || 'P');
+    DB.attendance[key] = record;
+    await saveDB();
+    document.getElementById('attSavedNote').textContent = 'Attendance saved for ' + fmtDate(attState.date) + '.';
+  };
+}
+
+/* ======================= MARKS ======================= */
+let marksState = {className:'', section:'', exam:EXAMS[0], subject:SUBJECTS[0], draft:{}};
+function marksView(){
+  if(session.role==='student'){
+    const student = DB.students.find(s=>s.id===session.id) || session;
+    const prefix = `${student.className}-${student.section}-`;
+    const rows = [];
+    Object.keys(DB.marks).forEach(k=>{
+      if(!k.startsWith(prefix)) return;
+      const val = DB.marks[k][student.id];
+      if(val===undefined || val==='') return;
+      const [exam, subject] = k.slice(prefix.length).split('-');
+      rows.push({exam, subject, val});
+    });
+    return `
+    <div class="panel">
+      <h2>My marks</h2>
+      ${rows.length===0 ? `<div class="empty"><b>No marks recorded yet</b>Your subject teacher enters marks after each examination.</div>` : `
+      <table>
+        <thead><tr><th class="idx">#</th><th>Examination</th><th>Subject</th><th>Marks (/100)</th></tr></thead>
+        <tbody>
+          ${rows.map((r,i)=>`
+            <tr>
+              <td class="idx">${i+1}</td>
+              <td>${esc(r.exam)}</td>
+              <td>${esc(r.subject)}</td>
+              <td>${esc(r.val)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>`;
+  }
+  if(session.role==='teacher'){
+    marksState.className = session.assignedClass; marksState.section = session.assignedSection;
+    if(!marksState.subject || !SUBJECTS.includes(marksState.subject)) marksState.subject = session.subject || SUBJECTS[0];
+  } else if(!marksState.className){
+    marksState.className = CLASSES[0]; marksState.section = SECTIONS[0];
+  }
+  const isTeacher = session.role==='teacher';
+  const key = `${marksState.className}-${marksState.section}-${marksState.exam}-${marksState.subject}`;
+  const saved = DB.marks[key] || {};
+  const roster = studentsOf(marksState.className, marksState.section);
+
+  return `
+  <div class="panel">
+    <h2>Examination marks</h2>
+    <div class="row-inline">
+      ${isTeacher ? `<div class="field"><label>Class</label><input value="Class ${marksState.className}-${marksState.section}" disabled></div>` : `
+      <div class="field"><label>Class</label><select id="mClass">${CLASSES.map(c=>`<option value="${c}" ${c===marksState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Section</label><select id="mSection">${SECTIONS.map(x=>`<option ${x===marksState.section?'selected':''}>${x}</option>`).join('')}</select></div>
+      `}
+      <div class="field"><label>Examination</label><select id="mExam">${EXAMS.map(x=>`<option ${x===marksState.exam?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Subject</label><select id="mSubject">${SUBJECTS.map(x=>`<option ${x===marksState.subject?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div>
+    ${roster.length===0 ? `<div class="empty"><b>No students in this class-section</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Admission No.</th><th>Name</th><th style="width:140px;">Marks (/100)</th></tr></thead>
+      <tbody>
+        ${roster.map((s,i)=>{
+          const val = (key in marksState.draft) ? (marksState.draft[key][s.id] ?? '') : (saved[s.id] ?? '');
+          return `<tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(s.admissionNo)}</td>
+            <td>${esc(s.name)}</td>
+            <td><input type="number" min="0" max="100" class="markInput" data-sid="${s.id}" value="${val}" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;"></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:16px;display:flex;align-items:center;gap:14px;">
+      <button class="btn btn-primary" id="mSave">Save marks</button>
+      <span class="note" id="mSavedNote">${key in DB.marks ? 'Previously saved for this exam.' : ''}</span>
+    </div>`}
+  </div>`;
+}
+function attachMarksHandlers(){
+  if(session.role==='student') return;
+  const cSel = document.getElementById('mClass');
+  if(cSel) cSel.onchange = ()=>{ marksState.className=cSel.value; render(); };
+  const sSel = document.getElementById('mSection');
+  if(sSel) sSel.onchange = ()=>{ marksState.section=sSel.value; render(); };
+  const eSel = document.getElementById('mExam');
+  if(eSel) eSel.onchange = ()=>{ marksState.exam=eSel.value; render(); };
+  const subSel = document.getElementById('mSubject');
+  if(subSel) subSel.onchange = ()=>{ marksState.subject=subSel.value; render(); };
+
+  const key = `${marksState.className}-${marksState.section}-${marksState.exam}-${marksState.subject}`;
+  if(!marksState.draft[key]) marksState.draft[key] = {...(DB.marks[key]||{})};
+  document.querySelectorAll('.markInput').forEach(inp=>{
+    inp.oninput = ()=>{ marksState.draft[key][inp.dataset.sid] = inp.value; };
+  });
+  const save = document.getElementById('mSave');
+  if(save) save.onclick = async ()=>{
+    const roster = studentsOf(marksState.className, marksState.section);
+    const record = {};
+    roster.forEach(s=>{
+      const inp = document.querySelector(`.markInput[data-sid="${s.id}"]`);
+      record[s.id] = inp ? inp.value : '';
+    });
+    DB.marks[key] = record;
+    await saveDB();
+    document.getElementById('mSavedNote').textContent = 'Marks saved for ' + marksState.exam + '.';
+  };
+}
+
+/* ======================= ADMISSIONS ======================= */
+let admFormOpen = false;
+function admissionsView(){
+  const canAdd = session.role==='office' || session.role==='principal';
+  const list = [...DB.admissions].reverse();
+  return `
+  <div class="panel">
+    <h2>Admissions register ${canAdd ? `<button class="btn btn-primary" id="addAdmBtn">+ New admission</button>` : ''}</h2>
+    ${list.length===0 ? `<div class="empty"><b>No admissions recorded</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Name</th><th>Father's Name</th><th>Class</th><th>Date</th><th>Status</th></tr></thead>
+      <tbody>
+        ${list.map((a,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(a.name)}</td>
+            <td>${esc(a.fatherName)}</td>
+            <td>${esc(a.className)}-${esc(a.section)}</td>
+            <td>${fmtDate(a.date)}</td>
+            <td><span class="pill pill-present">${esc(a.status)}</span></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  ${admFormOpen ? admFormModal() : ''}`;
+}
+function admFormModal(){
+  return `
+  <div class="modal-bg" id="admModalBg">
+    <div class="modal">
+      <h3>New admission</h3>
+      <div class="field"><label>Student's full name</label><input id="afName"></div>
+      <div class="row-inline">
+        <div class="field"><label>Father's name</label><input id="afFather"></div>
+        <div class="field"><label>Mother's name</label><input id="afMother"></div>
+      </div>
+      <div class="row-inline">
+        <div class="field"><label>Date of birth</label><input type="date" id="afDob"></div>
+        <div class="field"><label>Contact number</label><input id="afContact"></div>
+      </div>
+      <div class="row-inline">
+        <div class="field"><label>Admitted to class</label><select id="afClass">${CLASSES.map(c=>`<option value="${c}">Class ${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Section</label><select id="afSection">${SECTIONS.map(s=>`<option>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Address</label><input id="afAddress" placeholder="Singhpora Kalan"></div>
+      <div class="row-inline">
+        <div class="field"><label>Student login username</label><input id="afUser" placeholder="auto-generated if blank"></div>
+        <div class="field"><label>Student login password</label><input id="afPass" placeholder="auto-generated if blank"></div>
+      </div>
+      <div class="note">This is what the student will use to log in and view their own attendance, marks and certificates.</div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="afSave">Admit student</button>
+        <button class="btn btn-outline" id="afCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachAdmissionsHandlers(){
+  const addBtn = document.getElementById('addAdmBtn');
+  if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; render(); };
+  const cancel = document.getElementById('afCancel');
+  if(cancel) cancel.onclick = ()=>{ admFormOpen=false; render(); };
+  const save = document.getElementById('afSave');
+  if(save) save.onclick = async ()=>{
+    const name = document.getElementById('afName').value.trim();
+    const fatherName = document.getElementById('afFather').value.trim();
+    const motherName = document.getElementById('afMother').value.trim();
+    const dob = document.getElementById('afDob').value;
+    const contact = document.getElementById('afContact').value.trim();
+    const className = document.getElementById('afClass').value;
+    const section = document.getElementById('afSection').value;
+    const address = document.getElementById('afAddress').value.trim();
+    if(!name || !fatherName){ alert('Please enter at least the student and father\'s name.'); return; }
+    const year = new Date().getFullYear();
+    const seq = (DB.students.length+1).toString().padStart(4,'0');
+    const admissionNo = `GGHSS-${year}-${seq}`;
+    const sId = uid('s');
+    let username = document.getElementById('afUser').value.trim();
+    let password = document.getElementById('afPass').value;
+    if(!username) username = name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'') || uid('stu');
+    if(DB.students.some(s=>s.username===username)) username = `${username}.${seq}`;
+    if(!password) password = 'student' + seq;
+    DB.students.push({
+      id:sId, admissionNo, name, fatherName, motherName, dob, className, section,
+      address, contact, admissionDate: todayISO(), status:'active', username, password
+    });
+    DB.admissions.push({id:uid('a'), name, fatherName, className, section, date: todayISO(), status:'Admitted', studentId:sId});
+    await saveDB();
+    admFormOpen=false; render();
+    alert(`Student admitted. Login for ${name}:\nUsername: ${username}\nPassword: ${password}`);
+  };
+}
+
+/* ======================= CERTIFICATES ======================= */
+let certFormOpen = false;
+function certificatesView(){
+  if(session.role==='student'){
+    const list = DB.certificates.filter(c=>c.studentId===session.id).reverse();
+    return `
+    <div class="panel">
+      <h2>My certificates</h2>
+      ${list.length===0 ? `<div class="empty"><b>No certificates issued yet</b>Ask the school office if you need one.</div>` : `
+      <table>
+        <thead><tr><th class="idx">#</th><th>Certificate No.</th><th>Type</th><th>Date issued</th><th></th></tr></thead>
+        <tbody>
+          ${list.map((c,i)=>`
+            <tr>
+              <td class="idx">${i+1}</td>
+              <td>${esc(c.certNumber)}</td>
+              <td>${esc(c.type)}</td>
+              <td>${fmtDate(c.issueDate)}</td>
+              <td><button class="link-btn" data-view="${c.id}">View / Print</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>`;
+  }
+  const canIssue = session.role==='office' || session.role==='principal';
+  const list = [...DB.certificates].reverse();
+  return `
+  <div class="panel">
+    <h2>Certificates ${canIssue ? `<button class="btn btn-primary" id="addCertBtn">+ Issue certificate</button>` : ''}</h2>
+    ${list.length===0 ? `<div class="empty"><b>No certificates issued yet</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Certificate No.</th><th>Type</th><th>Student</th><th>Date issued</th><th></th></tr></thead>
+      <tbody>
+        ${list.map((c,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(c.certNumber)}</td>
+            <td>${esc(c.type)}</td>
+            <td>${esc(c.studentName)}</td>
+            <td>${fmtDate(c.issueDate)}</td>
+            <td><button class="link-btn" data-view="${c.id}">View / Print</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  ${certFormOpen ? certFormModal() : ''}`;
+}
+function certFormModal(){
+  const active = DB.students.filter(s=>s.status!=='left');
+  return `
+  <div class="modal-bg" id="certModalBg">
+    <div class="modal">
+      <h3>Issue certificate</h3>
+      <div class="field"><label>Student</label>
+        <select id="cfStudent">${active.map(s=>`<option value="${s.id}">${esc(s.name)} — ${esc(s.admissionNo)} (Class ${esc(s.className)}-${esc(s.section)})</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Certificate type</label>
+        <select id="cfType">${CERT_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Purpose / remarks (optional)</label><input id="cfReason" placeholder="e.g. for scholarship application"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="cfSave">Generate certificate</button>
+        <button class="btn btn-outline" id="cfCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachCertificatesHandlers(){
+  const addBtn = document.getElementById('addCertBtn');
+  if(addBtn) addBtn.onclick = ()=>{ certFormOpen=true; render(); };
+  const cancel = document.getElementById('cfCancel');
+  if(cancel) cancel.onclick = ()=>{ certFormOpen=false; render(); };
+  const save = document.getElementById('cfSave');
+  if(save) save.onclick = async ()=>{
+    const studentId = document.getElementById('cfStudent').value;
+    const type = document.getElementById('cfType').value;
+    const reason = document.getElementById('cfReason').value.trim();
+    const student = DB.students.find(s=>s.id===studentId);
+    const year = new Date().getFullYear();
+    const initials = type.split(' ').map(w=>w[0]).join('').toUpperCase();
+    const seq = (DB.certificates.length+1).toString().padStart(4,'0');
+    const certNumber = `GGHSS/${initials}/${year}/${seq}`;
+    const record = {id:uid('c'), studentId, studentName:student.name, type, reason, issueDate: todayISO(), certNumber};
+    DB.certificates.push(record);
+    await saveDB();
+    certFormOpen=false;
+    render();
+    openCertOverlay(record);
+  };
+  document.querySelectorAll('[data-view]').forEach(b=>{
+    b.onclick = ()=>{
+      const rec = DB.certificates.find(c=>c.id===b.dataset.view);
+      if(rec) openCertOverlay(rec);
+    };
+  });
+}
+function certBodyText(rec, student){
+  const clsLine = `Class ${student.className}-${student.section}`;
+  if(rec.type==='Bonafide Certificate'){
+    return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+    is a bona fide student of this institution, currently studying in ${clsLine} for the academic session ${new Date().getFullYear()}.
+    Her admission number is <b>${esc(student.admissionNo)}</b> and her date of birth, as recorded in the school register, is ${fmtDate(student.dob)}.
+    ${rec.reason ? `This certificate is issued ${esc(rec.reason)}.` : 'This certificate is issued on request for whatever purpose it may serve.'}`;
+  }
+  if(rec.type==='Transfer Certificate'){
+    return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+    admission number <b>${esc(student.admissionNo)}</b>, was a student of this school and was studying in ${clsLine}
+    at the time of leaving. Her date of birth as per the school register is ${fmtDate(student.dob)}, and her conduct
+    during her time at this institution was satisfactory. She is hereby relieved from the rolls of this school
+    with effect from ${fmtDate(todayISO())}. ${rec.reason ? `Reason for leaving: ${esc(rec.reason)}.` : ''}`;
+  }
+  if(rec.type==='Character Certificate'){
+    return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+    a student of ${clsLine}, admission number <b>${esc(student.admissionNo)}</b>, bears a good moral character.
+    During her association with this institution, her conduct and behaviour have been found satisfactory.
+    ${rec.reason ? `This certificate is issued ${esc(rec.reason)}.` : 'This certificate is issued on request.'}`;
+  }
+  return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+  admission number <b>${esc(student.admissionNo)}</b>, is provisionally certified as a student of ${clsLine} of this
+  institution for the academic session ${new Date().getFullYear()}, pending completion of final records.
+  ${rec.reason ? `Issued ${esc(rec.reason)}.` : ''}`;
+}
+function openCertOverlay(rec){
+  const student = DB.students.find(s=>s.id===rec.studentId);
+  const overlay = document.getElementById('certOverlay');
+  overlay.innerHTML = `
+    <div class="cert-toolbar no-print">
+      <button class="btn btn-outline" style="border-color:#fff;color:#fff;" id="certClose">Close</button>
+      <button class="btn btn-primary" id="certPrint">Print</button>
+    </div>
+    <div class="cert-sheet">
+      <div class="cert-border"></div>
+      <div class="cert-head">
+        <div style="display:flex;justify-content:center;">${sealSVG(60)}</div>
+        <div class="sch">${SCHOOL_NAME}</div>
+        <div class="addr">${SCHOOL_LOC}, Jammu &amp; Kashmir</div>
+      </div>
+      <div class="cert-title">${esc(rec.type)}</div>
+      <div style="text-align:right;font-size:13px;margin-bottom:6px;">Certificate No.: <b>${esc(rec.certNumber)}</b></div>
+      <div class="cert-body">${certBodyText(rec, student)}</div>
+      <div class="cert-foot">
+        <div>Date: ${fmtDate(rec.issueDate)}</div>
+        <div style="text-align:center;">
+          <div style="height:40px;"></div>
+          <div style="border-top:1px solid var(--ink);padding-top:4px;">Principal<br>${SCHOOL_NAME}</div>
+        </div>
+      </div>
+    </div>`;
+  overlay.style.display = 'block';
+  document.getElementById('certClose').onclick = ()=>{ overlay.style.display='none'; overlay.innerHTML=''; };
+  document.getElementById('certPrint').onclick = ()=> window.print();
+}
+
+/* ======================= INIT ======================= */
+(async function init(){
+  await loadDB();
+  render();
+})();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(e=> console.warn('Service worker registration failed (this is expected if the file is opened directly rather than served over http/https):', e));
+  });
+}
+</script>
+</body>
+</html>
