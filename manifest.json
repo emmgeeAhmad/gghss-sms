@@ -5,7 +5,7 @@
   "start_url": "./gghss-singhpora-kalan.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "portrait",
   "background_color": "#F6F1E4",
   "theme_color": "#1B3A5C",
   "icons": [
