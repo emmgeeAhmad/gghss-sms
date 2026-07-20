@@ -256,8 +256,14 @@ const SCHOOL_NAME = "Government Girls Higher Secondary School";
 const SCHOOL_LOC = "Singhpora Kalan";
 const CLASSES = ["1","2","3","4","5","6","7","8","9","10","11","12"];
 const SECTIONS = ["A","B"];
-const SUBJECTS = ["English","Urdu","Hindi","Mathematics","Science","Social Science","Environmental Studies","Computer Science","Physical Education"];
+const SUBJECTS = [
+  "English","Urdu","Hindi","Mathematics","Science","Social Science","Environmental Studies",
+  "Computer Science","Physical Education",
+  "Physics","Chemistry","Biology","Accountancy","Business Studies","Economics",
+  "History","Political Science","Geography","Psychology","Sociology","Home Science","Music"
+];
 const EXAMS = ["Unit Test 1","Unit Test 2","Half Yearly Examination","Unit Test 3","Annual Examination"];
+const DESIGNATIONS = ["Teacher","Lecturer","Senior Lecturer"];
 const CERT_TYPES = ["Bonafide Certificate","Transfer Certificate","Character Certificate","Provisional Certificate"];
 
 let DB = null;
@@ -282,7 +288,8 @@ function seedDB(){
   return {
     users:[
       {id:"u1", username:"principal", password:"Chinar5277#", role:"principal", name:"Dr Emm Gee Ahmad"},
-      {id:"u2", username:"teacher1", password:"Saffron6776#", role:"teacher", name:"Mrs. Nusrat Jan", assignedClass:"9", assignedSection:"A", subject:"Science"},
+      {id:"u2", username:"teacher1", password:"Saffron6776#", role:"teacher", name:"Mrs. Nusrat Jan", designation:"Senior Lecturer",
+        assignments:[{className:"9", section:"A", subject:"Science"}, {className:"11", section:"A", subject:"Physics"}, {className:"12", section:"A", subject:"Physics"}]},
       {id:"u3", username:"office1", password:"Zabarwan8457!", role:"office", name:"Mr. Bilal Ahmad (Office)"}
     ],
     students:[
@@ -295,7 +302,10 @@ function seedDB(){
     ],
     attendance:{},
     marks:{},
-    certificates:[]
+    certificates:[],
+    reportCards:[],
+    assignments:[],
+    circulars:[]
   };
 }
 
@@ -308,19 +318,52 @@ async function loadDB(){
     DB = seedDB();
     await saveDB();
   }
+  // Ensure older saved data (from before these features existed) has the new collections.
+  if(!DB.reportCards) DB.reportCards = [];
+  if(!DB.assignments) DB.assignments = [];
+  if(!DB.circulars) DB.circulars = [];
 }
 async function saveDB(){
   try{ localStorage.setItem('school_db', JSON.stringify(DB)); }
   catch(e){ console.error('Save failed', e); }
 }
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+function readFileAsDataURL(file){
+  return new Promise((resolve, reject)=>{
+    if(!file){ resolve(null); return; }
+    if(file.size > 4*1024*1024){ reject(new Error('File is too large (max 4MB).')); return; }
+    const reader = new FileReader();
+    reader.onload = ()=> resolve({name:file.name, data:reader.result});
+    reader.onerror = ()=> reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 /* ======================= HELPERS ======================= */
 function studentsOf(cls, sec){
   return DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
 }
 function teacherStudents(u){
-  return studentsOf(u.assignedClass, u.assignedSection);
+  const seen = new Set();
+  const out = [];
+  (u.assignments||[]).forEach(a=>{
+    studentsOf(a.className, a.section).forEach(s=>{
+      if(!seen.has(s.id)){ seen.add(s.id); out.push(s); }
+    });
+  });
+  return out;
+}
+function teacherClassOptions(u){
+  // unique {className, section} combos the teacher is assigned to
+  const seen = new Set(); const out = [];
+  (u.assignments||[]).forEach(a=>{
+    const k = `${a.className}-${a.section}`;
+    if(!seen.has(k)){ seen.add(k); out.push({className:a.className, section:a.section}); }
+  });
+  return out;
+}
+function teacherSubjectsFor(u, className, section){
+  return (u.assignments||[]).filter(a=>a.className===className && a.section===section).map(a=>a.subject);
 }
 function esc(str){ return (str||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(d){ if(!d) return ''; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'}); }
@@ -423,16 +466,20 @@ function attachLoginHandlers(){
 function navLinksFor(role){
   if(role==='principal') return [
     ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],
-    ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"]
+    ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"],
+    ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"]
   ];
   if(role==='teacher') return [
-    ["dashboard","Dashboard"],["attendance","Attendance"],["marks","Marks"]
+    ["dashboard","Dashboard"],["attendance","Attendance"],["marks","Marks"],
+    ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"]
   ];
   if(role==='office') return [
-    ["dashboard","Dashboard"],["admissions","Admissions"],["students","Student Directory"],["certificates","Certificates"]
+    ["dashboard","Dashboard"],["admissions","Admissions"],["students","Student Directory"],["certificates","Certificates"],
+    ["reportcards","Report Cards"],["circulars","Circulars"]
   ];
   return [ // student
-    ["dashboard","Dashboard"],["attendance","My Attendance"],["marks","My Marks"],["certificates","My Certificates"]
+    ["dashboard","Dashboard"],["attendance","My Attendance"],["marks","My Marks"],["certificates","My Certificates"],
+    ["reportcards","My Report Cards"],["assignments","Assignments"]
   ];
 }
 let mobileNavOpen = false;
@@ -448,7 +495,7 @@ function shellView(){
           <div class="loc">${SCHOOL_LOC}</div>
         </div>
       </div>
-      <div class="sb-role">${session.role} panel</div>
+      <div class="sb-role">${session.role==='teacher' ? esc(session.designation||'Teacher') : session.role} panel</div>
       ${links.map(([r,label])=>`<div class="sb-link ${route===r?'active':''}" data-route="${r}">${label}</div>`).join('')}
       <div class="sb-spacer"></div>
       <div class="sb-user">
@@ -478,7 +525,8 @@ function pageTitle(){
   const isStudent = session.role==='student';
   const map = {dashboard:"Dashboard", staff:"Manage Staff", students: session.role==='office'?"Student Directory":"Students",
     attendance: isStudent?"My Attendance":"Attendance", marks: isStudent?"My Marks":"Marks",
-    admissions:"Admissions", certificates: isStudent?"My Certificates":"Certificates"};
+    admissions:"Admissions", certificates: isStudent?"My Certificates":"Certificates",
+    reportcards: isStudent?"My Report Cards":"Report Cards", assignments:"Assignments", circulars:"Circulars & Orders"};
   return map[route] || "Dashboard";
 }
 let pwModalOpen = false;
@@ -573,6 +621,9 @@ function routeView(){
   if(route==='marks') return marksView();
   if(route==='admissions') return admissionsView();
   if(route==='certificates') return certificatesView();
+  if(route==='reportcards') return reportCardsView();
+  if(route==='assignments') return assignmentsView();
+  if(route==='circulars') return circularsView();
   return dashboardView();
 }
 function attachRouteHandlers(){
@@ -583,6 +634,9 @@ function attachRouteHandlers(){
   if(route==='marks') return attachMarksHandlers();
   if(route==='admissions') return attachAdmissionsHandlers();
   if(route==='certificates') return attachCertificatesHandlers();
+  if(route==='reportcards') return attachReportCardsHandlers();
+  if(route==='assignments') return attachAssignmentsHandlers();
+  if(route==='circulars') return attachCircularsHandlers();
 }
 
 /* ======================= DASHBOARD ======================= */
@@ -621,17 +675,19 @@ function dashboardView(){
   }
   if(session.role==='teacher'){
     const myStudents = teacherStudents(session);
+    const classOpts = teacherClassOptions(session);
+    const classList = classOpts.map(c=>`Class ${c.className}-${c.section}`).join(', ') || '—';
     return `
     <div class="grid grid-3" style="margin-bottom:22px;">
-      <div class="stat-card"><div class="num">${myStudents.length}</div><div class="lbl">Students in Class ${session.assignedClass}-${session.assignedSection}</div></div>
-      <div class="stat-card"><div class="num">${session.subject||'—'}</div><div class="lbl">Subject charge</div></div>
+      <div class="stat-card"><div class="num">${myStudents.length}</div><div class="lbl">Students across your classes</div></div>
+      <div class="stat-card"><div class="num">${classOpts.length}</div><div class="lbl">Classes assigned</div></div>
       <div class="stat-card"><div class="num">${presentToday}/${attToday||'—'}</div><div class="lbl">Marked present today (all classes)</div></div>
     </div>
     <div class="panel">
-      <h2>Welcome, ${esc(session.name)}</h2>
+      <h2>Welcome, ${esc(session.name)} <span class="tag">${esc(session.designation||'Teacher')}</span></h2>
       <p style="line-height:1.8;color:var(--ink-soft);font-size:13.5px;">
-        You are the class teacher for <b>Class ${session.assignedClass}-${session.assignedSection}</b>, teaching <b>${session.subject||'—'}</b>.
-        Use <b>Attendance</b> to mark today's roll call and <b>Marks</b> to record examination scores for your class.
+        You teach <b>${classList}</b>.
+        Use <b>Attendance</b> to mark today's roll call and <b>Marks</b> to record examination scores for the class you select.
       </p>
     </div>`;
   }
@@ -680,6 +736,7 @@ function dashboardView(){
 
 /* ======================= STAFF (Principal only) ======================= */
 let staffFormOpen = false;
+let sfAssignments = [{className:CLASSES[8], section:SECTIONS[0], subject:SUBJECTS[0]}];
 function staffView(){
   const staff = DB.users.filter(u=>u.role!=='principal');
   return `
@@ -694,8 +751,8 @@ function staffView(){
             <td class="idx">${i+1}</td>
             <td>${esc(u.name)}</td>
             <td>${esc(u.username)}</td>
-            <td style="text-transform:capitalize;">${u.role}</td>
-            <td>${u.role==='teacher' ? `Class ${esc(u.assignedClass)}-${esc(u.assignedSection)} · ${esc(u.subject||'—')}` : '—'}</td>
+            <td style="text-transform:capitalize;">${u.role==='teacher' ? esc(u.designation||'Teacher') : u.role}</td>
+            <td>${u.role==='teacher' ? (u.assignments||[]).map(a=>`Class ${esc(a.className)}-${esc(a.section)} · ${esc(a.subject)}`).join('<br>') || '—' : '—'}</td>
             <td><button class="link-btn" data-reset="${u.id}">Reset password</button> · <button class="link-btn danger" data-del="${u.id}">Remove</button></td>
           </tr>`).join('')}
       </tbody>
@@ -720,17 +777,26 @@ function staffFormModal(){
         </select>
       </div>
       <div id="sfTeacherFields">
-        <div class="row-inline">
-          <div class="field"><label>Assigned class</label>
-            <select id="sfClass">${CLASSES.map(c=>`<option value="${c}">Class ${c}</option>`).join('')}</select>
-          </div>
-          <div class="field"><label>Section</label>
-            <select id="sfSection">${SECTIONS.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
-          </div>
+        <div class="field"><label>Designation</label>
+          <select id="sfDesignation">${DESIGNATIONS.map(d=>`<option value="${d}">${d}</option>`).join('')}</select>
         </div>
-        <div class="field"><label>Subject</label>
-          <select id="sfSubject">${SUBJECTS.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">Classes taught</label>
+        <div id="sfAssignRows">
+          ${sfAssignments.map((a,idx)=>`
+            <div class="row-inline" data-arow="${idx}" style="align-items:flex-end;">
+              <div class="field"><label>Class</label>
+                <select data-afield="className" data-arow="${idx}">${CLASSES.map(c=>`<option value="${c}" ${c===a.className?'selected':''}>Class ${c}</option>`).join('')}</select>
+              </div>
+              <div class="field"><label>Section</label>
+                <select data-afield="section" data-arow="${idx}">${SECTIONS.map(s=>`<option value="${s}" ${s===a.section?'selected':''}>${s}</option>`).join('')}</select>
+              </div>
+              <div class="field" style="flex:1.4;"><label>Subject</label>
+                <select data-afield="subject" data-arow="${idx}">${SUBJECTS.map(s=>`<option value="${s}" ${s===a.subject?'selected':''}>${s}</option>`).join('')}</select>
+              </div>
+              ${sfAssignments.length>1 ? `<button type="button" class="btn btn-outline" data-arow-remove="${idx}" style="margin-bottom:16px;">Remove</button>` : ''}
+            </div>`).join('')}
         </div>
+        <button type="button" class="btn btn-outline" id="sfAddRow" style="margin-bottom:14px;">+ Add another class</button>
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;">
         <button class="btn btn-primary" id="sfSave">Save account</button>
@@ -741,7 +807,7 @@ function staffFormModal(){
 }
 function attachStaffHandlers(){
   const addBtn = document.getElementById('addStaffBtn');
-  if(addBtn) addBtn.onclick = ()=>{ staffFormOpen=true; render(); };
+  if(addBtn) addBtn.onclick = ()=>{ staffFormOpen=true; sfAssignments=[{className:CLASSES[8], section:SECTIONS[0], subject:SUBJECTS[0]}]; render(); };
   document.querySelectorAll('[data-del]').forEach(b=>{
     b.onclick = async ()=>{
       if(!confirm('Remove this staff account?')) return;
@@ -766,6 +832,21 @@ function attachStaffHandlers(){
     const toggle = ()=> document.getElementById('sfTeacherFields').style.display = roleSel.value==='teacher' ? 'block':'none';
     roleSel.onchange = toggle; toggle();
   }
+  document.querySelectorAll('[data-afield]').forEach(sel=>{
+    sel.onchange = ()=>{
+      const idx = parseInt(sel.dataset.arow, 10);
+      sfAssignments[idx][sel.dataset.afield] = sel.value;
+    };
+  });
+  const addRow = document.getElementById('sfAddRow');
+  if(addRow) addRow.onclick = ()=>{ sfAssignments.push({className:CLASSES[8], section:SECTIONS[0], subject:SUBJECTS[0]}); render(); };
+  document.querySelectorAll('[data-arow-remove]').forEach(b=>{
+    b.onclick = ()=>{
+      const idx = parseInt(b.dataset.arowRemove, 10);
+      sfAssignments.splice(idx,1);
+      render();
+    };
+  });
   const cancel = document.getElementById('sfCancel');
   if(cancel) cancel.onclick = ()=>{ staffFormOpen=false; render(); };
   const save = document.getElementById('sfSave');
@@ -778,9 +859,8 @@ function attachStaffHandlers(){
     if(DB.users.some(u=>u.username===username)){ alert('That username is already taken.'); return; }
     const newUser = {id:uid('u'), username, password, role, name};
     if(role==='teacher'){
-      newUser.assignedClass = document.getElementById('sfClass').value;
-      newUser.assignedSection = document.getElementById('sfSection').value;
-      newUser.subject = document.getElementById('sfSubject').value;
+      newUser.designation = document.getElementById('sfDesignation').value;
+      newUser.assignments = sfAssignments.map(a=>({...a}));
     }
     DB.users.push(newUser);
     await saveDB();
@@ -917,8 +997,12 @@ function attendanceView(){
       </table>`}
     </div>`;
   }
+  const teacherClasses = session.role==='teacher' ? teacherClassOptions(session) : [];
   if(session.role==='teacher'){
-    attState.className = session.assignedClass; attState.section = session.assignedSection;
+    if(!attState.className || !teacherClasses.some(c=>c.className===attState.className && c.section===attState.section)){
+      attState.className = teacherClasses[0] ? teacherClasses[0].className : CLASSES[0];
+      attState.section = teacherClasses[0] ? teacherClasses[0].section : SECTIONS[0];
+    }
   } else if(!attState.className){
     attState.className = CLASSES[0]; attState.section = SECTIONS[0];
   }
@@ -931,7 +1015,9 @@ function attendanceView(){
   <div class="panel">
     <h2>Attendance register</h2>
     <div class="row-inline">
-      ${isTeacher ? `<div class="field"><label>Class</label><input value="Class ${attState.className}-${attState.section}" disabled></div>` : `
+      ${isTeacher ? `<div class="field"><label>Class</label>
+        <select id="attClassSec">${teacherClasses.map(c=>`<option value="${c.className}|${c.section}" ${c.className===attState.className && c.section===attState.section?'selected':''}>Class ${c.className}-${c.section}</option>`).join('')}</select>
+      </div>` : `
       <div class="field"><label>Class</label><select id="attClass">${CLASSES.map(c=>`<option value="${c}" ${c===attState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
       <div class="field"><label>Section</label><select id="attSection">${SECTIONS.map(x=>`<option ${x===attState.section?'selected':''}>${x}</option>`).join('')}</select></div>
       `}
@@ -970,6 +1056,8 @@ function attachAttendanceHandlers(){
   if(cSel) cSel.onchange = ()=>{ attState.className=cSel.value; render(); };
   const sSel = document.getElementById('attSection');
   if(sSel) sSel.onchange = ()=>{ attState.section=sSel.value; render(); };
+  const csSel = document.getElementById('attClassSec');
+  if(csSel) csSel.onchange = ()=>{ const [c,s]=csSel.value.split('|'); attState.className=c; attState.section=s; render(); };
   const dSel = document.getElementById('attDate');
   if(dSel) dSel.onchange = ()=>{ attState.date=dSel.value; render(); };
   const key = `${attState.className}-${attState.section}-${attState.date}`;
@@ -1025,9 +1113,14 @@ function marksView(){
       </table>`}
     </div>`;
   }
+  const teacherClasses = session.role==='teacher' ? teacherClassOptions(session) : [];
   if(session.role==='teacher'){
-    marksState.className = session.assignedClass; marksState.section = session.assignedSection;
-    if(!marksState.subject || !SUBJECTS.includes(marksState.subject)) marksState.subject = session.subject || SUBJECTS[0];
+    if(!marksState.className || !teacherClasses.some(c=>c.className===marksState.className && c.section===marksState.section)){
+      marksState.className = teacherClasses[0] ? teacherClasses[0].className : CLASSES[0];
+      marksState.section = teacherClasses[0] ? teacherClasses[0].section : SECTIONS[0];
+    }
+    const mySubjects = teacherSubjectsFor(session, marksState.className, marksState.section);
+    if(!marksState.subject || !mySubjects.includes(marksState.subject)) marksState.subject = mySubjects[0] || SUBJECTS[0];
   } else if(!marksState.className){
     marksState.className = CLASSES[0]; marksState.section = SECTIONS[0];
   }
@@ -1035,17 +1128,20 @@ function marksView(){
   const key = `${marksState.className}-${marksState.section}-${marksState.exam}-${marksState.subject}`;
   const saved = DB.marks[key] || {};
   const roster = studentsOf(marksState.className, marksState.section);
+  const subjectOptions = isTeacher ? teacherSubjectsFor(session, marksState.className, marksState.section) : SUBJECTS;
 
   return `
   <div class="panel">
     <h2>Examination marks</h2>
     <div class="row-inline">
-      ${isTeacher ? `<div class="field"><label>Class</label><input value="Class ${marksState.className}-${marksState.section}" disabled></div>` : `
+      ${isTeacher ? `<div class="field"><label>Class</label>
+        <select id="mClassSec">${teacherClasses.map(c=>`<option value="${c.className}|${c.section}" ${c.className===marksState.className && c.section===marksState.section?'selected':''}>Class ${c.className}-${c.section}</option>`).join('')}</select>
+      </div>` : `
       <div class="field"><label>Class</label><select id="mClass">${CLASSES.map(c=>`<option value="${c}" ${c===marksState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
       <div class="field"><label>Section</label><select id="mSection">${SECTIONS.map(x=>`<option ${x===marksState.section?'selected':''}>${x}</option>`).join('')}</select></div>
       `}
       <div class="field"><label>Examination</label><select id="mExam">${EXAMS.map(x=>`<option ${x===marksState.exam?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div class="field"><label>Subject</label><select id="mSubject">${SUBJECTS.map(x=>`<option ${x===marksState.subject?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Subject</label><select id="mSubject">${subjectOptions.map(x=>`<option ${x===marksState.subject?'selected':''}>${x}</option>`).join('')}</select></div>
     </div>
     ${roster.length===0 ? `<div class="empty"><b>No students in this class-section</b></div>` : `
     <table>
@@ -1074,6 +1170,8 @@ function attachMarksHandlers(){
   if(cSel) cSel.onchange = ()=>{ marksState.className=cSel.value; render(); };
   const sSel = document.getElementById('mSection');
   if(sSel) sSel.onchange = ()=>{ marksState.section=sSel.value; render(); };
+  const csSel = document.getElementById('mClassSec');
+  if(csSel) csSel.onchange = ()=>{ const [c,s]=csSel.value.split('|'); marksState.className=c; marksState.section=s; marksState.subject=''; render(); };
   const eSel = document.getElementById('mExam');
   if(eSel) eSel.onchange = ()=>{ marksState.exam=eSel.value; render(); };
   const subSel = document.getElementById('mSubject');
@@ -1342,6 +1440,269 @@ function openCertOverlay(rec){
   overlay.style.display = 'block';
   document.getElementById('certClose').onclick = ()=>{ overlay.style.display='none'; overlay.innerHTML=''; };
   document.getElementById('certPrint').onclick = ()=> window.print();
+}
+
+/* ======================= REPORT CARDS ======================= */
+let rcFormOpen = false;
+function reportCardsView(){
+  if(session.role==='student'){
+    const list = DB.reportCards.filter(r=>r.studentId===session.id).slice().reverse();
+    return `
+    <div class="panel">
+      <h2>My report cards</h2>
+      ${list.length===0 ? `<div class="empty"><b>No report cards uploaded yet</b>Your school office will upload these after results are finalised.</div>` : `
+      <table>
+        <thead><tr><th class="idx">#</th><th>Term</th><th>Uploaded</th><th></th></tr></thead>
+        <tbody>
+          ${list.map((r,i)=>`
+            <tr>
+              <td class="idx">${i+1}</td>
+              <td>${esc(r.term)}</td>
+              <td>${fmtDate(r.uploadedDate)}</td>
+              <td><a href="${r.fileData}" download="${esc(r.fileName||'report-card')}" class="link-btn">Download</a></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>`;
+  }
+  const canUpload = session.role==='principal' || session.role==='office' || session.role==='teacher';
+  const visibleStudents = session.role==='teacher' ? teacherStudents(session) : DB.students.filter(s=>s.status!=='left');
+  const list = DB.reportCards.slice().reverse().filter(r=>{
+    if(session.role!=='teacher') return true;
+    return visibleStudents.some(s=>s.id===r.studentId);
+  });
+  return `
+  <div class="panel">
+    <h2>Report cards ${canUpload ? `<button class="btn btn-primary" id="addRcBtn">+ Upload report card</button>` : ''}</h2>
+    ${list.length===0 ? `<div class="empty"><b>No report cards uploaded yet</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Student</th><th>Class</th><th>Term</th><th>Uploaded</th><th></th></tr></thead>
+      <tbody>
+        ${list.map((r,i)=>{
+          const st = DB.students.find(s=>s.id===r.studentId);
+          return `<tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(st ? st.name : 'Unknown')}</td>
+            <td>${st ? esc(st.className)+'-'+esc(st.section) : '—'}</td>
+            <td>${esc(r.term)}</td>
+            <td>${fmtDate(r.uploadedDate)}</td>
+            <td><a href="${r.fileData}" download="${esc(r.fileName||'report-card')}" class="link-btn">Download</a> · <button class="link-btn danger" data-rc-del="${r.id}">Delete</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  ${rcFormOpen ? reportCardFormModal(visibleStudents) : ''}`;
+}
+function reportCardFormModal(students){
+  return `
+  <div class="modal-bg" id="rcModalBg">
+    <div class="modal">
+      <h3>Upload report card</h3>
+      <div class="field"><label>Student</label>
+        <select id="rcStudent">${students.map(s=>`<option value="${s.id}">${esc(s.name)} — Class ${esc(s.className)}-${esc(s.section)} (${esc(s.admissionNo)})</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Term / examination</label><input id="rcTerm" placeholder="e.g. Half Yearly 2026"></div>
+      <div class="field"><label>Report card file (PDF or image, max 4MB)</label><input type="file" id="rcFile" accept=".pdf,image/*"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="rcSave">Upload</button>
+        <button class="btn btn-outline" id="rcCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachReportCardsHandlers(){
+  const addBtn = document.getElementById('addRcBtn');
+  if(addBtn) addBtn.onclick = ()=>{ rcFormOpen=true; render(); };
+  const cancel = document.getElementById('rcCancel');
+  if(cancel) cancel.onclick = ()=>{ rcFormOpen=false; render(); };
+  document.querySelectorAll('[data-rc-del]').forEach(b=>{
+    b.onclick = async ()=>{
+      if(!confirm('Delete this report card?')) return;
+      DB.reportCards = DB.reportCards.filter(r=>r.id!==b.dataset.rcDel);
+      await saveDB(); render();
+    };
+  });
+  const save = document.getElementById('rcSave');
+  if(save) save.onclick = async ()=>{
+    const studentId = document.getElementById('rcStudent').value;
+    const term = document.getElementById('rcTerm').value.trim();
+    const fileInput = document.getElementById('rcFile');
+    if(!studentId || !term){ alert('Please select a student and enter the term.'); return; }
+    if(!fileInput.files[0]){ alert('Please choose a file to upload.'); return; }
+    try{
+      const file = await readFileAsDataURL(fileInput.files[0]);
+      DB.reportCards.push({id:uid('rc'), studentId, term, fileName:file.name, fileData:file.data, uploadedBy:session.name, uploadedDate:todayISO()});
+      await saveDB();
+      rcFormOpen=false; render();
+    }catch(e){ alert(e.message || 'Could not read that file.'); }
+  };
+}
+
+/* ======================= ASSIGNMENTS & PROJECTS ======================= */
+let asgFormOpen = false;
+function assignmentsView(){
+  if(session.role==='student'){
+    const student = DB.students.find(s=>s.id===session.id) || session;
+    const list = DB.assignments.filter(a=>a.className===student.className && a.section===student.section).slice().reverse();
+    return `
+    <div class="panel">
+      <h2>Assignments &amp; projects</h2>
+      ${list.length===0 ? `<div class="empty"><b>Nothing posted yet</b>Your teachers will post assignments and projects here.</div>` : list.map(a=>`
+        <div class="panel" style="margin-bottom:12px;background:var(--cream);">
+          <h3 style="margin:0 0 6px;">${esc(a.title)} <span class="tag">${esc(a.subject)}</span></h3>
+          <div class="note" style="margin-bottom:8px;">Posted by ${esc(a.postedBy)} on ${fmtDate(a.postedDate)} ${a.dueDate ? '· Due ' + fmtDate(a.dueDate) : ''}</div>
+          <p style="font-size:13.5px;line-height:1.7;white-space:pre-wrap;">${esc(a.description)}</p>
+          ${a.fileData ? `<a href="${a.fileData}" download="${esc(a.fileName||'attachment')}" class="link-btn">Download attachment</a>` : ''}
+        </div>`).join('')}
+    </div>`;
+  }
+  const isTeacher = session.role==='teacher';
+  const classOpts = isTeacher ? teacherClassOptions(session) : CLASSES.flatMap(c=>SECTIONS.map(s=>({className:c, section:s})));
+  const list = DB.assignments.slice().reverse().filter(a=> !isTeacher || a.postedByUserId===session.id);
+  return `
+  <div class="panel">
+    <h2>Assignments &amp; projects <button class="btn btn-primary" id="addAsgBtn">+ Post assignment</button></h2>
+    ${list.length===0 ? `<div class="empty"><b>Nothing posted yet</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Class</th><th>Subject</th><th>Title</th><th>Due</th><th></th></tr></thead>
+      <tbody>
+        ${list.map((a,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(a.className)}-${esc(a.section)}</td>
+            <td>${esc(a.subject)}</td>
+            <td>${esc(a.title)}</td>
+            <td>${a.dueDate ? fmtDate(a.dueDate) : '—'}</td>
+            <td>${a.fileData ? `<a href="${a.fileData}" download="${esc(a.fileName||'attachment')}" class="link-btn">File</a> · ` : ''}<button class="link-btn danger" data-asg-del="${a.id}">Delete</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>
+  ${asgFormOpen ? assignmentFormModal(classOpts) : ''}`;
+}
+function assignmentFormModal(classOpts){
+  return `
+  <div class="modal-bg" id="asgModalBg">
+    <div class="modal">
+      <h3>Post assignment / project</h3>
+      <div class="row-inline">
+        <div class="field"><label>Class</label>
+          <select id="asgClassSec">${classOpts.map(c=>`<option value="${c.className}|${c.section}">Class ${c.className}-${c.section}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Subject</label>
+          <select id="asgSubject">${SUBJECTS.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="field"><label>Title</label><input id="asgTitle" placeholder="e.g. Chapter 4 worksheet"></div>
+      <div class="field"><label>Description / instructions</label><textarea id="asgDesc" rows="4" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:4px;font-family:inherit;"></textarea></div>
+      <div class="row-inline">
+        <div class="field"><label>Due date (optional)</label><input type="date" id="asgDue"></div>
+        <div class="field"><label>Attachment (optional, max 4MB)</label><input type="file" id="asgFile"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="asgSave">Post</button>
+        <button class="btn btn-outline" id="asgCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachAssignmentsHandlers(){
+  const addBtn = document.getElementById('addAsgBtn');
+  if(addBtn) addBtn.onclick = ()=>{ asgFormOpen=true; render(); };
+  const cancel = document.getElementById('asgCancel');
+  if(cancel) cancel.onclick = ()=>{ asgFormOpen=false; render(); };
+  document.querySelectorAll('[data-asg-del]').forEach(b=>{
+    b.onclick = async ()=>{
+      if(!confirm('Delete this assignment?')) return;
+      DB.assignments = DB.assignments.filter(a=>a.id!==b.dataset.asgDel);
+      await saveDB(); render();
+    };
+  });
+  const save = document.getElementById('asgSave');
+  if(save) save.onclick = async ()=>{
+    const [className, section] = document.getElementById('asgClassSec').value.split('|');
+    const subject = document.getElementById('asgSubject').value;
+    const title = document.getElementById('asgTitle').value.trim();
+    const description = document.getElementById('asgDesc').value.trim();
+    const dueDate = document.getElementById('asgDue').value;
+    const fileInput = document.getElementById('asgFile');
+    if(!title){ alert('Please enter a title.'); return; }
+    try{
+      const file = fileInput.files[0] ? await readFileAsDataURL(fileInput.files[0]) : null;
+      DB.assignments.push({
+        id:uid('asg'), className, section, subject, title, description, dueDate,
+        fileName: file ? file.name : '', fileData: file ? file.data : '',
+        postedBy: session.name, postedByUserId: session.id, postedDate: todayISO()
+      });
+      await saveDB();
+      asgFormOpen=false; render();
+    }catch(e){ alert(e.message || 'Could not read that file.'); }
+  };
+}
+
+/* ======================= CIRCULARS & ORDERS (staff only) ======================= */
+let circFormOpen = false;
+function circularsView(){
+  const canPost = session.role==='principal';
+  const list = DB.circulars.slice().reverse();
+  return `
+  <div class="panel">
+    <h2>Circulars &amp; orders ${canPost ? `<button class="btn btn-primary" id="addCircBtn">+ Post circular</button>` : ''}</h2>
+    ${list.length===0 ? `<div class="empty"><b>No circulars posted yet</b>Notices and orders from the Principal will appear here.</div>` : list.map(c=>`
+      <div class="panel" style="margin-bottom:12px;background:var(--cream);">
+        <h3 style="margin:0 0 6px;">${esc(c.title)}</h3>
+        <div class="note" style="margin-bottom:8px;">Posted by ${esc(c.postedBy)} on ${fmtDate(c.postedDate)}</div>
+        <p style="font-size:13.5px;line-height:1.7;white-space:pre-wrap;">${esc(c.body)}</p>
+        ${c.fileData ? `<a href="${c.fileData}" download="${esc(c.fileName||'circular')}" class="link-btn">Download attachment</a> ` : ''}
+        ${canPost ? `<button class="link-btn danger" data-circ-del="${c.id}" style="margin-left:10px;">Delete</button>` : ''}
+      </div>`).join('')}
+  </div>
+  ${circFormOpen ? circularFormModal() : ''}`;
+}
+function circularFormModal(){
+  return `
+  <div class="modal-bg" id="circModalBg">
+    <div class="modal">
+      <h3>Post circular / order</h3>
+      <div class="field"><label>Title</label><input id="circTitle" placeholder="e.g. Revised school timings"></div>
+      <div class="field"><label>Details</label><textarea id="circBody" rows="5" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:4px;font-family:inherit;"></textarea></div>
+      <div class="field"><label>Attachment (optional, max 4MB)</label><input type="file" id="circFile"></div>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn btn-primary" id="circSave">Post</button>
+        <button class="btn btn-outline" id="circCancel">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachCircularsHandlers(){
+  const addBtn = document.getElementById('addCircBtn');
+  if(addBtn) addBtn.onclick = ()=>{ circFormOpen=true; render(); };
+  const cancel = document.getElementById('circCancel');
+  if(cancel) cancel.onclick = ()=>{ circFormOpen=false; render(); };
+  document.querySelectorAll('[data-circ-del]').forEach(b=>{
+    b.onclick = async ()=>{
+      if(!confirm('Delete this circular?')) return;
+      DB.circulars = DB.circulars.filter(c=>c.id!==b.dataset.circDel);
+      await saveDB(); render();
+    };
+  });
+  const save = document.getElementById('circSave');
+  if(save) save.onclick = async ()=>{
+    const title = document.getElementById('circTitle').value.trim();
+    const body = document.getElementById('circBody').value.trim();
+    const fileInput = document.getElementById('circFile');
+    if(!title || !body){ alert('Please enter a title and details.'); return; }
+    try{
+      const file = fileInput.files[0] ? await readFileAsDataURL(fileInput.files[0]) : null;
+      DB.circulars.push({
+        id:uid('circ'), title, body, fileName: file ? file.name : '', fileData: file ? file.data : '',
+        postedBy: session.name, postedDate: todayISO()
+      });
+      await saveDB();
+      circFormOpen=false; render();
+    }catch(e){ alert(e.message || 'Could not read that file.'); }
+  };
 }
 
 /* ======================= INIT ======================= */
