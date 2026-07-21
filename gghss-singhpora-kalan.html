@@ -1370,7 +1370,7 @@ function admissionsView(){
     <h2>Admissions register ${canAdd ? `<button class="btn btn-primary" id="addAdmBtn">+ New admission</button>` : ''}</h2>
     ${list.length===0 ? `<div class="empty"><b>No admissions recorded</b></div>` : `
     <table>
-      <thead><tr><th class="idx">#</th><th>Name</th><th>Father's Name</th><th>Class</th><th>Date</th><th>Status</th></tr></thead>
+      <thead><tr><th class="idx">#</th><th>Name</th><th>Father's Name</th><th>Class</th><th>Date</th><th>Status</th>${canAdd?'<th></th>':''}</tr></thead>
       <tbody>
         ${list.map((a,i)=>`
           <tr>
@@ -1380,6 +1380,7 @@ function admissionsView(){
             <td>${esc(a.className)}-${esc(a.section)}</td>
             <td>${fmtDate(a.date)}</td>
             <td><span class="pill pill-present">${esc(a.status)}</span></td>
+            ${canAdd ? `<td><button class="link-btn danger" data-adm-del="${a.id}">Delete</button></td>` : ''}
           </tr>`).join('')}
       </tbody>
     </table>`}
@@ -1427,6 +1428,27 @@ function admFormModal(){
 function attachAdmissionsHandlers(){
   const addBtn = document.getElementById('addAdmBtn');
   if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; render(); };
+  document.querySelectorAll('[data-adm-del]').forEach(b=>{
+    b.onclick = async ()=>{
+      const adm = DB.admissions.find(a=>a.id===b.dataset.admDel);
+      if(!adm) return;
+      if(session.role==='principal'){
+        if(!confirm(`Permanently delete this admission entry for ${adm.name}? This also removes their student record entirely (attendance, marks, certificates linked to them may become orphaned). This cannot be undone.`)) return;
+        DB.admissions = DB.admissions.filter(a=>a.id!==adm.id);
+        if(adm.studentId) DB.students = DB.students.filter(s=>s.id!==adm.studentId);
+        await saveDB(); render();
+      } else {
+        if(!confirm(`Submit a request to permanently delete this admission entry for ${adm.name}? This needs Principal approval.`)) return;
+        DB.approvals.push({
+          id:uid('ap'), kind:'admission_delete', targetId:adm.id, targetLabel:adm.name,
+          requestedBy:session.name, requestedByRole:session.role, requestedDate:todayISO(), status:'pending'
+        });
+        await saveDB();
+        alert('Deletion request submitted for Principal approval.');
+        render();
+      }
+    };
+  });
   const cancel = document.getElementById('afCancel');
   if(cancel) cancel.onclick = ()=>{ admFormOpen=false; render(); };
   const save = document.getElementById('afSave');
@@ -1972,8 +1994,18 @@ const APPROVAL_FIELD_LABELS = {
   address:"Address", username:"Username", password:"Password",
   designation:"Designation", assignments:"Classes taught"
 };
+function approvalKindLabel(kind){
+  if(kind==='student_edit') return 'Student edit';
+  if(kind==='student_delete') return 'Student removal';
+  if(kind==='admission_delete') return 'Admission entry deletion';
+  if(kind==='staff_edit') return 'Staff edit';
+  if(kind==='staff_reset_password') return 'Staff password reset';
+  return kind;
+}
 function approvalSummary(a){
   if(a.kind==='student_delete' || a.kind==='staff_delete') return `Remove ${esc(a.targetLabel)} from active records.`;
+  if(a.kind==='admission_delete') return `Permanently delete the admission entry and student record for ${esc(a.targetLabel)}. This cannot be undone once approved.`;
+  if(a.kind==='staff_reset_password') return `Reset this staff member's login password.`;
   const rows = Object.keys(a.changes||{}).map(k=>{
     let val = a.changes[k];
     if(k==='assignments' && Array.isArray(val)){
@@ -1991,7 +2023,7 @@ function approvalsView(){
     <h2>Pending approvals</h2>
     ${pending.length===0 ? `<div class="empty"><b>Nothing waiting for review</b>Edits and deletions submitted by Office staff and Accounts will appear here.</div>` : pending.map(a=>`
       <div class="panel" style="margin-bottom:12px;background:var(--cream);">
-        <h3 style="margin:0 0 6px;">${a.kind.includes('student') ? 'Student' : 'Staff'} ${a.kind.includes('delete') ? 'removal' : 'edit'} — ${esc(a.targetLabel)}</h3>
+        <h3 style="margin:0 0 6px;">${approvalKindLabel(a.kind)} — ${esc(a.targetLabel)}</h3>
         <div class="note" style="margin-bottom:10px;">Requested by ${esc(a.requestedBy)} (${esc(a.requestedByRole)}) on ${fmtDate(a.requestedDate)}</div>
         <div style="font-size:13.5px;margin-bottom:12px;">${approvalSummary(a)}</div>
         <button class="btn btn-primary" data-approve="${a.id}">Approve</button>
@@ -2007,7 +2039,7 @@ function approvalsView(){
         ${reviewed.map((a,i)=>`
           <tr>
             <td class="idx">${i+1}</td>
-            <td>${a.kind.includes('student') ? 'Student' : 'Staff'} ${a.kind.includes('delete') ? 'removal' : 'edit'}</td>
+            <td>${approvalKindLabel(a.kind)}</td>
             <td>${esc(a.targetLabel)}</td>
             <td>${esc(a.requestedBy)}</td>
             <td><span class="pill ${a.status==='approved'?'pill-present':'pill-absent'}">${a.status==='approved'?'Approved':'Rejected'}</span></td>
@@ -2023,6 +2055,12 @@ function applyApproval(a){
   } else if(a.kind==='student_delete'){
     const s = DB.students.find(x=>x.id===a.targetId);
     if(s) s.status = 'left';
+  } else if(a.kind==='admission_delete'){
+    const adm = DB.admissions.find(x=>x.id===a.targetId);
+    if(adm){
+      DB.admissions = DB.admissions.filter(x=>x.id!==adm.id);
+      if(adm.studentId) DB.students = DB.students.filter(s=>s.id!==adm.studentId);
+    }
   } else if(a.kind==='staff_edit'){
     const u = DB.users.find(x=>x.id===a.targetId);
     if(u) Object.assign(u, a.changes);
