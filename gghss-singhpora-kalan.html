@@ -475,7 +475,7 @@ function navLinksFor(s){
       ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],
       ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"],
       ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"],["accounts","Accounts"],
-      ["approvals", pending>0 ? `Approvals (${pending})` : "Approvals"]
+      ["approvals", pending>0 ? `Approvals (${pending})` : "Approvals"],["backup","Backup & Restore"]
     ];
   }
   if(role==='teacher'){
@@ -545,7 +545,7 @@ function pageTitle(){
     attendance: isStudent?"My Attendance":"Attendance", marks: isStudent?"My Marks":"Marks",
     admissions:"Admissions", certificates: isStudent?"My Certificates":"Certificates",
     reportcards: isStudent?"My Report Cards":"Report Cards", assignments:"Assignments", circulars:"Circulars & Orders",
-    accounts:"Accounts", approvals:"Approvals"};
+    accounts:"Accounts", approvals:"Approvals", backup:"Backup & Restore"};
   return map[route] || "Dashboard";
 }
 let pwModalOpen = false;
@@ -645,6 +645,7 @@ function routeView(){
   if(route==='circulars') return circularsView();
   if(route==='accounts') return accountsView();
   if(route==='approvals' && session.role==='principal') return approvalsView();
+  if(route==='backup' && session.role==='principal') return backupView();
   return dashboardView();
 }
 function attachRouteHandlers(){
@@ -660,6 +661,7 @@ function attachRouteHandlers(){
   if(route==='circulars') return attachCircularsHandlers();
   if(route==='accounts') return attachAccountsHandlers();
   if(route==='approvals') return attachApprovalsHandlers();
+  if(route==='backup') return attachBackupHandlers();
 }
 
 /* ======================= DASHBOARD ======================= */
@@ -2091,6 +2093,87 @@ function attachApprovalsHandlers(){
       await saveDB(); render();
     };
   });
+}
+
+/* ======================= BACKUP & RESTORE ======================= */
+function backupView(){
+  const studentCount = DB.students.filter(s=>s.status!=='left').length;
+  const staffCount = DB.users.filter(u=>u.role!=='principal').length;
+  return `
+  <div class="panel">
+    <h2>Download a backup</h2>
+    <p style="font-size:13.5px;line-height:1.8;color:var(--ink-soft);">
+      This app stores all its data only in this browser on this device — there is no separate server copy.
+      If the browser's data is ever cleared, or you switch devices, everything (students, staff, marks, certificates)
+      can be lost unless you have a backup file. <b>Download a backup regularly</b> — after admitting new students,
+      adding staff, or entering marks — and save the file somewhere safe (email it to yourself, or save it to Google Drive).
+    </p>
+    <p style="font-size:13.5px;margin-bottom:14px;"><b>Current data:</b> ${studentCount} active students, ${staffCount} staff accounts.</p>
+    <button class="btn btn-primary" id="downloadBackupBtn">Download backup file</button>
+  </div>
+  <div class="panel">
+    <h2>Restore from a backup</h2>
+    <p style="font-size:13.5px;line-height:1.8;color:var(--ink-soft);">
+      Use this if this device's data was lost or reset, and you have a backup file downloaded earlier.
+      <b style="color:var(--saffron-dark);">Warning: this replaces everything currently in the app with the contents of the backup file.</b>
+    </p>
+    <input type="file" id="restoreFile" accept=".json" style="margin-bottom:12px;display:block;">
+    <button class="btn btn-outline" id="restoreBackupBtn">Restore from this file</button>
+  </div>`;
+}
+function attachBackupHandlers(){
+  const dlBtn = document.getElementById('downloadBackupBtn');
+  if(dlBtn) dlBtn.onclick = ()=>{
+    try{
+      const payload = {
+        appName: "GGHSS Singhpora Kalan — School Management System",
+        backupVersion: 1,
+        exportedDate: new Date().toISOString(),
+        data: DB
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gghss-sms-backup-${todayISO()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }catch(e){
+      alert('Could not create the backup file: ' + e.message);
+    }
+  };
+  const restoreBtn = document.getElementById('restoreBackupBtn');
+  if(restoreBtn) restoreBtn.onclick = ()=>{
+    const fileInput = document.getElementById('restoreFile');
+    const file = fileInput.files[0];
+    if(!file){ alert('Please choose a backup file first.'); return; }
+    const reader = new FileReader();
+    reader.onload = async ()=>{
+      try{
+        const parsed = JSON.parse(reader.result);
+        const incoming = parsed.data || parsed; // support raw DB exports too
+        if(!incoming.students || !incoming.users){
+          alert('This does not look like a valid backup file.'); return;
+        }
+        if(!confirm('This will REPLACE all current data in the app with the contents of this backup file. This cannot be undone. Continue?')) return;
+        DB = incoming;
+        if(!DB.reportCards) DB.reportCards = [];
+        if(!DB.assignments) DB.assignments = [];
+        if(!DB.circulars) DB.circulars = [];
+        if(!DB.accountEntries) DB.accountEntries = [];
+        if(!DB.approvals) DB.approvals = [];
+        await saveDB();
+        alert('Backup restored successfully.');
+        render();
+      }catch(e){
+        alert('Could not read that file. Make sure it is a backup file downloaded from this app.');
+      }
+    };
+    reader.readAsText(file);
+  };
 }
 
 /* ======================= INIT ======================= */
