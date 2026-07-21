@@ -141,7 +141,8 @@
   .sb-user{padding:10px;border-top:1px solid rgba(237,230,210,0.18);font-size:12px;}
   .sb-user .u-name{font-weight:700;font-size:13px;}
   .sb-user .u-role{color:#C9BE9E;font-size:11px;text-transform:uppercase;letter-spacing:.06em;}
-  .sb-logout{margin-top:8px;width:100%;}
+  .sb-logout{margin-top:8px;width:100%;color:var(--cream)!important;border-color:rgba(244,238,221,0.5)!important;background:rgba(255,255,255,0.04);}
+  .sb-logout:hover{background:rgba(255,255,255,0.12);}
 
   .main{flex:1;min-width:0;}
   .topbar{
@@ -311,7 +312,8 @@ function seedDB(){
     reportCards:[],
     assignments:[],
     circulars:[],
-    accountEntries:[]
+    accountEntries:[],
+    approvals:[]
   };
 }
 
@@ -329,6 +331,7 @@ async function loadDB(){
   if(!DB.assignments) DB.assignments = [];
   if(!DB.circulars) DB.circulars = [];
   if(!DB.accountEntries) DB.accountEntries = [];
+  if(!DB.approvals) DB.approvals = [];
 }
 async function saveDB(){
   try{ localStorage.setItem('school_db', JSON.stringify(DB)); }
@@ -466,11 +469,15 @@ function attachLoginHandlers(){
 /* ======================= APP SHELL ======================= */
 function navLinksFor(s){
   const role = s.role;
-  if(role==='principal') return [
-    ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],
-    ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"],
-    ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"],["accounts","Accounts"]
-  ];
+  if(role==='principal'){
+    const pending = DB.approvals.filter(a=>a.status==='pending').length;
+    return [
+      ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],
+      ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"],
+      ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"],["accounts","Accounts"],
+      ["approvals", pending>0 ? `Approvals (${pending})` : "Approvals"]
+    ];
+  }
   if(role==='teacher'){
     const links = [
       ["dashboard","Dashboard"],["attendance","Attendance"],["marks","Marks"],
@@ -538,7 +545,7 @@ function pageTitle(){
     attendance: isStudent?"My Attendance":"Attendance", marks: isStudent?"My Marks":"Marks",
     admissions:"Admissions", certificates: isStudent?"My Certificates":"Certificates",
     reportcards: isStudent?"My Report Cards":"Report Cards", assignments:"Assignments", circulars:"Circulars & Orders",
-    accounts:"Accounts"};
+    accounts:"Accounts", approvals:"Approvals"};
   return map[route] || "Dashboard";
 }
 let pwModalOpen = false;
@@ -637,6 +644,7 @@ function routeView(){
   if(route==='assignments') return assignmentsView();
   if(route==='circulars') return circularsView();
   if(route==='accounts') return accountsView();
+  if(route==='approvals' && session.role==='principal') return approvalsView();
   return dashboardView();
 }
 function attachRouteHandlers(){
@@ -651,6 +659,7 @@ function attachRouteHandlers(){
   if(route==='assignments') return attachAssignmentsHandlers();
   if(route==='circulars') return attachCircularsHandlers();
   if(route==='accounts') return attachAccountsHandlers();
+  if(route==='approvals') return attachApprovalsHandlers();
 }
 
 /* ======================= DASHBOARD ======================= */
@@ -880,9 +889,18 @@ function attachStaffHandlers(){
       const newPass = prompt(`Enter a new password for ${u.name} (min 6 characters):`);
       if(newPass===null) return;
       if(newPass.length < 6){ alert('Password must be at least 6 characters.'); return; }
-      u.password = newPass;
-      await saveDB();
-      alert(`Password for ${u.name} has been reset.`);
+      if(session.role==='accounts'){
+        DB.approvals.push({
+          id:uid('ap'), kind:'staff_reset_password', targetId:u.id, targetLabel:u.name, changes:{password:newPass},
+          requestedBy:session.name, requestedByRole:session.role, requestedDate:todayISO(), status:'pending'
+        });
+        await saveDB();
+        alert('Password reset request submitted for Principal approval.');
+      } else {
+        u.password = newPass;
+        await saveDB();
+        alert(`Password for ${u.name} has been reset.`);
+      }
     };
   });
   const roleSel = document.getElementById('sfRole');
@@ -918,6 +936,23 @@ function attachStaffHandlers(){
       const u = DB.users.find(x=>x.id===staffEditId);
       if(!u){ staffFormOpen=false; render(); return; }
       if(DB.users.some(x=>x.id!==u.id && x.username===username)){ alert('That username is already taken.'); return; }
+
+      if(session.role==='accounts'){
+        const changes = {name, username};
+        if(u.role==='teacher'){
+          changes.designation = document.getElementById('sfDesignation').value;
+          changes.assignments = sfAssignments.map(a=>({...a}));
+        }
+        DB.approvals.push({
+          id:uid('ap'), kind:'staff_edit', targetId:u.id, targetLabel:u.name, changes,
+          requestedBy:session.name, requestedByRole:session.role, requestedDate:todayISO(), status:'pending'
+        });
+        await saveDB();
+        staffFormOpen=false; staffEditId=null; render();
+        alert('Changes submitted for Principal approval.');
+        return;
+      }
+
       u.name = name;
       u.username = username;
       if(password){
@@ -982,7 +1017,7 @@ function studentsView(){
             <td>${esc(s.contact)}</td>
             ${canEdit ? `<td>
               <button class="link-btn" data-edit="${s.id}">Edit</button>
-              ${session.role==='principal' ? ` · <button class="link-btn danger" data-remove="${s.id}">Remove</button>` : ''}
+               · <button class="link-btn danger" data-remove="${s.id}">Remove</button>
             </td>`:''}
           </tr>`).join('')}
       </tbody>
@@ -991,7 +1026,7 @@ function studentsView(){
   ${editing ? studentEditModal(editing) : ''}`;
 }
 function studentEditModal(s){
-  const fullEdit = session.role==='principal';
+  const fullEdit = true;
   return `
   <div class="modal-bg" id="stuModalBg">
     <div class="modal">
@@ -1020,6 +1055,7 @@ function studentEditModal(s){
         <div class="field"><label>Student login password</label><input id="sePass" value="${esc(s.password||'')}"></div>
       </div>
       <div class="note">Change these to reset the student's login. Leave as-is to keep their current credentials.</div>
+      ${session.role!=='principal' ? `<div class="note" style="color:var(--saffron-dark);font-weight:600;">These changes will be sent to the Principal for approval before they take effect.</div>` : ''}
       <div style="display:flex;gap:10px;margin-top:10px;">
         <button class="btn btn-primary" id="seSave">Save changes</button>
         <button class="btn btn-outline" id="seCancel">Cancel</button>
@@ -1034,46 +1070,66 @@ function attachStudentsHandlers(){
   if(sq) sq.oninput = ()=>{ studentFilter.q=sq.value; render(); };
   document.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{ studentEditId=b.dataset.edit; render(); });
   document.querySelectorAll('[data-remove]').forEach(b=> b.onclick=async ()=>{
-    if(!confirm('Remove this student from active records?')) return;
     const st = DB.students.find(x=>x.id===b.dataset.remove);
-    if(st) st.status='left';
-    await saveDB(); render();
+    if(!st) return;
+    if(session.role==='principal'){
+      if(!confirm('Remove this student from active records?')) return;
+      st.status='left';
+      await saveDB(); render();
+    } else {
+      if(!confirm(`Submit a request to remove ${st.name} from active records? This needs Principal approval before it takes effect.`)) return;
+      DB.approvals.push({
+        id:uid('ap'), kind:'student_delete', targetId:st.id, targetLabel:st.name,
+        requestedBy:session.name, requestedByRole:session.role, requestedDate:todayISO(), status:'pending'
+      });
+      await saveDB();
+      alert('Removal request submitted for Principal approval.');
+      render();
+    }
   });
   const cancel = document.getElementById('seCancel');
   if(cancel) cancel.onclick = ()=>{ studentEditId=null; render(); };
   const save = document.getElementById('seSave');
   if(save) save.onclick = async ()=>{
     const s = DB.students.find(x=>x.id===studentEditId);
-    s.name = document.getElementById('seName').value.trim();
-    s.contact = document.getElementById('seContact').value.trim();
-    if(session.role==='principal'){
-      const feEl = document.getElementById('seFather');
-      const moEl = document.getElementById('seMother');
-      const dobEl = document.getElementById('seDob');
-      const admEl = document.getElementById('seAdmNo');
-      if(feEl) s.fatherName = feEl.value.trim();
-      if(moEl) s.motherName = moEl.value.trim();
-      if(dobEl && dobEl.value) s.dob = dobEl.value;
-      if(admEl && admEl.value.trim()){
-        const newAdmNo = admEl.value.trim();
-        if(DB.students.some(x=>x.id!==s.id && x.admissionNo===newAdmNo)){
-          alert('That admission number is already used by another student.'); return;
-        }
-        s.admissionNo = newAdmNo;
-      }
+    const name = document.getElementById('seName').value.trim();
+    const contact = document.getElementById('seContact').value.trim();
+    const feEl = document.getElementById('seFather');
+    const moEl = document.getElementById('seMother');
+    const dobEl = document.getElementById('seDob');
+    const admEl = document.getElementById('seAdmNo');
+    const fatherName = feEl ? feEl.value.trim() : s.fatherName;
+    const motherName = moEl ? moEl.value.trim() : s.motherName;
+    const dob = (dobEl && dobEl.value) ? dobEl.value : s.dob;
+    const admissionNo = (admEl && admEl.value.trim()) ? admEl.value.trim() : s.admissionNo;
+    const className = document.getElementById('seClass').value;
+    const section = document.getElementById('seSection').value;
+    const address = document.getElementById('seAddress').value.trim();
+    const username = document.getElementById('seUser').value.trim() || s.username;
+    const password = document.getElementById('sePass').value || s.password;
+
+    if(admissionNo !== s.admissionNo && DB.students.some(x=>x.id!==s.id && x.admissionNo===admissionNo)){
+      alert('That admission number is already used by another student.'); return;
     }
-    s.className = document.getElementById('seClass').value;
-    s.section = document.getElementById('seSection').value;
-    s.address = document.getElementById('seAddress').value.trim();
-    const newUser = document.getElementById('seUser').value.trim();
-    const newPass = document.getElementById('sePass').value;
-    if(newUser && DB.students.some(x=>x.id!==s.id && x.username===newUser)){
+    if(username !== s.username && DB.students.some(x=>x.id!==s.id && x.username===username)){
       alert('That username is already taken by another student.'); return;
     }
-    if(newUser) s.username = newUser;
-    if(newPass) s.password = newPass;
-    await saveDB();
-    studentEditId=null; render();
+
+    const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address, username, password};
+
+    if(session.role==='principal'){
+      Object.assign(s, changes);
+      await saveDB();
+      studentEditId=null; render();
+    } else {
+      DB.approvals.push({
+        id:uid('ap'), kind:'student_edit', targetId:s.id, targetLabel:s.name, changes,
+        requestedBy:session.name, requestedByRole:session.role, requestedDate:todayISO(), status:'pending'
+      });
+      await saveDB();
+      studentEditId=null; render();
+      alert('Changes submitted for Principal approval.');
+    }
   };
 }
 
@@ -1331,10 +1387,17 @@ function admissionsView(){
   ${admFormOpen ? admFormModal() : ''}`;
 }
 function admFormModal(){
+  const year = new Date().getFullYear();
+  const seq = (DB.students.length+1).toString().padStart(4,'0');
+  const suggestedAdmNo = `GGHSS-${year}-${seq}`;
   return `
   <div class="modal-bg" id="admModalBg">
     <div class="modal">
       <h3>New admission</h3>
+      <div class="row-inline">
+        <div class="field"><label>Admission number</label><input id="afAdmNo" value="${suggestedAdmNo}"></div>
+        <div class="field"><label>Date of admission</label><input type="date" id="afAdmDate" value="${todayISO()}" max="${todayISO()}"></div>
+      </div>
       <div class="field"><label>Student's full name</label><input id="afName"></div>
       <div class="row-inline">
         <div class="field"><label>Father's name</label><input id="afFather"></div>
@@ -1368,6 +1431,8 @@ function attachAdmissionsHandlers(){
   if(cancel) cancel.onclick = ()=>{ admFormOpen=false; render(); };
   const save = document.getElementById('afSave');
   if(save) save.onclick = async ()=>{
+    const admissionNo = document.getElementById('afAdmNo').value.trim();
+    const admissionDate = document.getElementById('afAdmDate').value || todayISO();
     const name = document.getElementById('afName').value.trim();
     const fatherName = document.getElementById('afFather').value.trim();
     const motherName = document.getElementById('afMother').value.trim();
@@ -1377,9 +1442,9 @@ function attachAdmissionsHandlers(){
     const section = document.getElementById('afSection').value;
     const address = document.getElementById('afAddress').value.trim();
     if(!name || !fatherName){ alert('Please enter at least the student and father\'s name.'); return; }
-    const year = new Date().getFullYear();
+    if(!admissionNo){ alert('Please enter an admission number.'); return; }
+    if(DB.students.some(s=>s.admissionNo===admissionNo)){ alert('That admission number is already in use.'); return; }
     const seq = (DB.students.length+1).toString().padStart(4,'0');
-    const admissionNo = `GGHSS-${year}-${seq}`;
     const sId = uid('s');
     let username = document.getElementById('afUser').value.trim();
     let password = document.getElementById('afPass').value;
@@ -1388,9 +1453,9 @@ function attachAdmissionsHandlers(){
     if(!password) password = 'student' + seq;
     DB.students.push({
       id:sId, admissionNo, name, fatherName, motherName, dob, className, section,
-      address, contact, admissionDate: todayISO(), status:'active', username, password
+      address, contact, admissionDate, status:'active', username, password
     });
-    DB.admissions.push({id:uid('a'), name, fatherName, className, section, date: todayISO(), status:'Admitted', studentId:sId});
+    DB.admissions.push({id:uid('a'), name, fatherName, className, section, date: admissionDate, status:'Admitted', studentId:sId});
     await saveDB();
     admFormOpen=false; render();
     alert(`Student admitted. Login for ${name}:\nUsername: ${username}\nPassword: ${password}`);
@@ -1898,6 +1963,96 @@ function attachAccountsHandlers(){
     await saveDB();
     acFormOpen=false; render();
   };
+}
+
+/* ======================= APPROVALS ======================= */
+const APPROVAL_FIELD_LABELS = {
+  name:"Name", contact:"Contact", fatherName:"Father's name", motherName:"Mother's name",
+  dob:"Date of birth", admissionNo:"Admission No.", className:"Class", section:"Section",
+  address:"Address", username:"Username", password:"Password",
+  designation:"Designation", assignments:"Classes taught"
+};
+function approvalSummary(a){
+  if(a.kind==='student_delete' || a.kind==='staff_delete') return `Remove ${esc(a.targetLabel)} from active records.`;
+  const rows = Object.keys(a.changes||{}).map(k=>{
+    let val = a.changes[k];
+    if(k==='assignments' && Array.isArray(val)){
+      val = val.map(x=>`Class ${x.className}-${x.section} · ${x.subject}`).join(', ') || '(none)';
+    }
+    return `<div style="margin-bottom:4px;"><b>${APPROVAL_FIELD_LABELS[k]||k}:</b> ${esc(String(val))}</div>`;
+  }).join('');
+  return rows || '<i>No field changes recorded.</i>';
+}
+function approvalsView(){
+  const pending = DB.approvals.filter(a=>a.status==='pending').slice().reverse();
+  const reviewed = DB.approvals.filter(a=>a.status!=='pending').slice().reverse().slice(0,20);
+  return `
+  <div class="panel">
+    <h2>Pending approvals</h2>
+    ${pending.length===0 ? `<div class="empty"><b>Nothing waiting for review</b>Edits and deletions submitted by Office staff and Accounts will appear here.</div>` : pending.map(a=>`
+      <div class="panel" style="margin-bottom:12px;background:var(--cream);">
+        <h3 style="margin:0 0 6px;">${a.kind.includes('student') ? 'Student' : 'Staff'} ${a.kind.includes('delete') ? 'removal' : 'edit'} — ${esc(a.targetLabel)}</h3>
+        <div class="note" style="margin-bottom:10px;">Requested by ${esc(a.requestedBy)} (${esc(a.requestedByRole)}) on ${fmtDate(a.requestedDate)}</div>
+        <div style="font-size:13.5px;margin-bottom:12px;">${approvalSummary(a)}</div>
+        <button class="btn btn-primary" data-approve="${a.id}">Approve</button>
+        <button class="btn btn-outline" data-reject="${a.id}">Reject</button>
+      </div>`).join('')}
+  </div>
+  ${reviewed.length ? `
+  <div class="panel">
+    <h2>Recently reviewed</h2>
+    <table>
+      <thead><tr><th class="idx">#</th><th>Type</th><th>Target</th><th>Requested by</th><th>Status</th></tr></thead>
+      <tbody>
+        ${reviewed.map((a,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td>
+            <td>${a.kind.includes('student') ? 'Student' : 'Staff'} ${a.kind.includes('delete') ? 'removal' : 'edit'}</td>
+            <td>${esc(a.targetLabel)}</td>
+            <td>${esc(a.requestedBy)}</td>
+            <td><span class="pill ${a.status==='approved'?'pill-present':'pill-absent'}">${a.status==='approved'?'Approved':'Rejected'}</span></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : ''}`;
+}
+function applyApproval(a){
+  if(a.kind==='student_edit'){
+    const s = DB.students.find(x=>x.id===a.targetId);
+    if(s) Object.assign(s, a.changes);
+  } else if(a.kind==='student_delete'){
+    const s = DB.students.find(x=>x.id===a.targetId);
+    if(s) s.status = 'left';
+  } else if(a.kind==='staff_edit'){
+    const u = DB.users.find(x=>x.id===a.targetId);
+    if(u) Object.assign(u, a.changes);
+  } else if(a.kind==='staff_reset_password'){
+    const u = DB.users.find(x=>x.id===a.targetId);
+    if(u) u.password = a.changes.password;
+  }
+}
+function attachApprovalsHandlers(){
+  document.querySelectorAll('[data-approve]').forEach(b=>{
+    b.onclick = async ()=>{
+      const a = DB.approvals.find(x=>x.id===b.dataset.approve);
+      if(!a) return;
+      if(!confirm('Approve this request? It will be applied immediately.')) return;
+      applyApproval(a);
+      a.status = 'approved';
+      a.reviewedDate = todayISO();
+      await saveDB(); render();
+    };
+  });
+  document.querySelectorAll('[data-reject]').forEach(b=>{
+    b.onclick = async ()=>{
+      const a = DB.approvals.find(x=>x.id===b.dataset.reject);
+      if(!a) return;
+      if(!confirm('Reject this request? No changes will be made.')) return;
+      a.status = 'rejected';
+      a.reviewedDate = todayISO();
+      await saveDB(); render();
+    };
+  });
 }
 
 /* ======================= INIT ======================= */
