@@ -966,6 +966,7 @@ function studentsView(){
   ${editing ? studentEditModal(editing) : ''}`;
 }
 function studentEditModal(s){
+  const fullEdit = session.role==='principal';
   return `
   <div class="modal-bg" id="stuModalBg">
     <div class="modal">
@@ -974,6 +975,16 @@ function studentEditModal(s){
         <div class="field"><label>Full name</label><input id="seName" value="${esc(s.name)}"></div>
         <div class="field"><label>Contact number</label><input id="seContact" value="${esc(s.contact)}"></div>
       </div>
+      ${fullEdit ? `
+      <div class="row-inline">
+        <div class="field"><label>Father's name</label><input id="seFather" value="${esc(s.fatherName||'')}"></div>
+        <div class="field"><label>Mother's name</label><input id="seMother" value="${esc(s.motherName||'')}"></div>
+      </div>
+      <div class="row-inline">
+        <div class="field"><label>Date of birth</label><input type="date" id="seDob" value="${esc(s.dob||'')}"></div>
+        <div class="field"><label>Admission No.</label><input id="seAdmNo" value="${esc(s.admissionNo||'')}"></div>
+      </div>
+      ` : ''}
       <div class="row-inline">
         <div class="field"><label>Class</label><select id="seClass">${CLASSES.map(c=>`<option value="${c}" ${c===s.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
         <div class="field"><label>Section</label><select id="seSection">${SECTIONS.map(x=>`<option ${x===s.section?'selected':''}>${x}</option>`).join('')}</select></div>
@@ -1010,6 +1021,22 @@ function attachStudentsHandlers(){
     const s = DB.students.find(x=>x.id===studentEditId);
     s.name = document.getElementById('seName').value.trim();
     s.contact = document.getElementById('seContact').value.trim();
+    if(session.role==='principal'){
+      const feEl = document.getElementById('seFather');
+      const moEl = document.getElementById('seMother');
+      const dobEl = document.getElementById('seDob');
+      const admEl = document.getElementById('seAdmNo');
+      if(feEl) s.fatherName = feEl.value.trim();
+      if(moEl) s.motherName = moEl.value.trim();
+      if(dobEl && dobEl.value) s.dob = dobEl.value;
+      if(admEl && admEl.value.trim()){
+        const newAdmNo = admEl.value.trim();
+        if(DB.students.some(x=>x.id!==s.id && x.admissionNo===newAdmNo)){
+          alert('That admission number is already used by another student.'); return;
+        }
+        s.admissionNo = newAdmNo;
+      }
+    }
     s.className = document.getElementById('seClass').value;
     s.section = document.getElementById('seSection').value;
     s.address = document.getElementById('seAddress').value.trim();
@@ -1370,6 +1397,7 @@ function certificatesView(){
     </div>`;
   }
   const canIssue = session.role==='office' || session.role==='principal';
+  const canDelete = session.role==='principal';
   const list = [...DB.certificates].reverse();
   return `
   <div class="panel">
@@ -1385,7 +1413,7 @@ function certificatesView(){
             <td>${esc(c.type)}</td>
             <td>${esc(c.studentName)}</td>
             <td>${fmtDate(c.issueDate)}</td>
-            <td><button class="link-btn" data-view="${c.id}">View / Print</button></td>
+            <td><button class="link-btn" data-view="${c.id}">View / Print</button>${canDelete ? ` · <button class="link-btn danger" data-cert-del="${c.id}">Delete</button>` : ''}</td>
           </tr>`).join('')}
       </tbody>
     </table>`}
@@ -1438,6 +1466,13 @@ function attachCertificatesHandlers(){
     b.onclick = ()=>{
       const rec = DB.certificates.find(c=>c.id===b.dataset.view);
       if(rec) openCertOverlay(rec);
+    };
+  });
+  document.querySelectorAll('[data-cert-del]').forEach(b=>{
+    b.onclick = async ()=>{
+      if(!confirm('Delete this certificate? This cannot be undone.')) return;
+      DB.certificates = DB.certificates.filter(c=>c.id!==b.dataset.certDel);
+      await saveDB(); render();
     };
   });
 }
