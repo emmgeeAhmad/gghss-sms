@@ -372,6 +372,9 @@ function teacherClassOptions(u){
 function teacherSubjectsFor(u, className, section){
   return (u.assignments||[]).filter(a=>a.className===className && a.section===section).map(a=>a.subject);
 }
+function hasOfficeAccess(s){
+  return s.role==='principal' || s.role==='office' || (s.role==='teacher' && !!s.officeAccess);
+}
 function esc(str){ return (str||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtDate(d){ if(!d) return ''; const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'}); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -461,16 +464,23 @@ function attachLoginHandlers(){
 }
 
 /* ======================= APP SHELL ======================= */
-function navLinksFor(role){
+function navLinksFor(s){
+  const role = s.role;
   if(role==='principal') return [
     ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],
     ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"],
     ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"],["accounts","Accounts"]
   ];
-  if(role==='teacher') return [
-    ["dashboard","Dashboard"],["attendance","Attendance"],["marks","Marks"],
-    ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"]
-  ];
+  if(role==='teacher'){
+    const links = [
+      ["dashboard","Dashboard"],["attendance","Attendance"],["marks","Marks"],
+      ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"]
+    ];
+    if(s.officeAccess){
+      links.splice(3, 0, ["admissions","Admissions"], ["students","Student Directory"], ["certificates","Certificates"]);
+    }
+    return links;
+  }
   if(role==='office') return [
     ["dashboard","Dashboard"],["admissions","Admissions"],["students","Student Directory"],["certificates","Certificates"],
     ["reportcards","Report Cards"],["circulars","Circulars"]
@@ -485,7 +495,7 @@ function navLinksFor(role){
 }
 let mobileNavOpen = false;
 function shellView(){
-  const links = navLinksFor(session.role);
+  const links = navLinksFor(session);
   return `
   <div class="app">
     <div class="sidebar ${mobileNavOpen ? 'open' : ''}">
@@ -692,6 +702,7 @@ function dashboardView(){
       <p style="line-height:1.8;color:var(--ink-soft);font-size:13.5px;">
         You teach <b>${classList}</b>.
         Use <b>Attendance</b> to mark today's roll call and <b>Marks</b> to record examination scores for the class you select.
+        ${session.officeAccess ? ' You also have office access — use <b>Admissions</b>, <b>Student Directory</b>, and <b>Certificates</b> for office duties.' : ''}
       </p>
     </div>`;
   }
@@ -772,7 +783,7 @@ function staffView(){
             <td class="idx">${i+1}</td>
             <td>${esc(u.name)}</td>
             <td>${esc(u.username)}</td>
-            <td style="text-transform:capitalize;">${u.role==='teacher' ? esc(u.designation||'Teacher') : u.role}</td>
+            <td style="text-transform:capitalize;">${u.role==='teacher' ? esc(u.designation||'Teacher') : u.role}${u.role==='teacher' && u.officeAccess ? ' <span class="tag" style="text-transform:none;">+ Office access</span>' : ''}</td>
             <td>${u.role==='teacher' ? (u.assignments||[]).map(a=>`Class ${esc(a.className)}-${esc(a.section)} · ${esc(a.subject)}`).join('<br>') || '—' : '—'}</td>
             <td><button class="link-btn" data-edit="${u.id}">Edit</button> · <button class="link-btn" data-reset="${u.id}">Reset password</button> · <button class="link-btn danger" data-del="${u.id}">Remove</button></td>
           </tr>`).join('')}
@@ -825,6 +836,13 @@ function staffFormModal(){
             </div>`).join('')}
         </div>
         <button type="button" class="btn btn-outline" id="sfAddRow" style="margin-bottom:14px;">+ Add another class</button>
+        <div class="field" style="margin-top:6px;">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+            <input type="checkbox" id="sfOfficeAccess" ${editing && editing.officeAccess ? 'checked' : ''} style="width:16px;height:16px;">
+            Also give Office access (Admissions, Student Directory, Certificates)
+          </label>
+          <div class="note">Use this for a teacher who is additionally handling office duties. Their designation and classes taught stay the same.</div>
+        </div>
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;">
         <button class="btn btn-primary" id="sfSave">${editing ? 'Save changes' : 'Save account'}</button>
@@ -909,6 +927,7 @@ function attachStaffHandlers(){
       if(u.role==='teacher'){
         u.designation = document.getElementById('sfDesignation').value;
         u.assignments = sfAssignments.map(a=>({...a}));
+        u.officeAccess = document.getElementById('sfOfficeAccess').checked;
       }
       await saveDB();
       staffFormOpen=false; staffEditId=null; render();
@@ -922,6 +941,7 @@ function attachStaffHandlers(){
     if(role==='teacher'){
       newUser.designation = document.getElementById('sfDesignation').value;
       newUser.assignments = sfAssignments.map(a=>({...a}));
+      newUser.officeAccess = document.getElementById('sfOfficeAccess').checked;
     }
     DB.users.push(newUser);
     await saveDB();
@@ -933,7 +953,7 @@ function attachStaffHandlers(){
 let studentFilter = {className:'', q:''};
 let studentEditId = null;
 function studentsView(){
-  const canEdit = session.role==='principal' || session.role==='office';
+  const canEdit = hasOfficeAccess(session);
   let list = DB.students.filter(s=>s.status!=='left');
   if(studentFilter.className) list = list.filter(s=>s.className===studentFilter.className);
   if(studentFilter.q) list = list.filter(s=> s.name.toLowerCase().includes(studentFilter.q.toLowerCase()) || s.admissionNo.toLowerCase().includes(studentFilter.q.toLowerCase()));
@@ -1287,7 +1307,7 @@ function attachMarksHandlers(){
 /* ======================= ADMISSIONS ======================= */
 let admFormOpen = false;
 function admissionsView(){
-  const canAdd = session.role==='office' || session.role==='principal';
+  const canAdd = hasOfficeAccess(session);
   const list = [...DB.admissions].reverse();
   return `
   <div class="panel">
@@ -1401,7 +1421,7 @@ function certificatesView(){
       </table>`}
     </div>`;
   }
-  const canIssue = session.role==='office' || session.role==='principal';
+  const canIssue = hasOfficeAccess(session);
   const canDelete = session.role==='principal';
   const list = [...DB.certificates].reverse();
   return `
