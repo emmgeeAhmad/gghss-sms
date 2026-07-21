@@ -263,7 +263,11 @@ const SUBJECTS = [
   "History","Political Science","Geography","Psychology","Sociology","Home Science","Music","Education"
 ];
 const EXAMS = ["Unit Test 1","Unit Test 2","Half Yearly Examination","Unit Test 3","Annual Examination"];
-const DESIGNATIONS = ["Teacher","Lecturer","Senior Lecturer"];
+const DESIGNATIONS = [
+  "Teacher","Master","Lecturer","Senior Lecturer",
+  "Physical Education Teacher (PET)","Physical Education Master (PEM)",
+  "Librarian","Laboratory Assistant","Laboratory Attendant"
+];
 const CERT_TYPES = ["Bonafide Certificate","Transfer Certificate","Character Certificate","Provisional Certificate"];
 
 let DB = null;
@@ -794,8 +798,9 @@ function staffFormModal(){
       ` : `
       <div class="field"><label>Role</label>
         <select id="sfRole">
-          <option value="teacher">Teacher</option>
+          <option value="teacher">Teacher / Non-teaching staff (Librarian, Lab, PET-PEM, etc.)</option>
           <option value="office">Office</option>
+          <option value="accounts">Accounts</option>
         </select>
       </div>
       `}
@@ -803,7 +808,7 @@ function staffFormModal(){
         <div class="field"><label>Designation</label>
           <select id="sfDesignation">${DESIGNATIONS.map(d=>`<option value="${d}" ${editing && editing.designation===d ? 'selected':''}>${d}</option>`).join('')}</select>
         </div>
-        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">Classes taught</label>
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">Classes taught (leave empty for non-teaching staff such as Librarian or Lab Assistant)</label>
         <div id="sfAssignRows">
           ${sfAssignments.map((a,idx)=>`
             <div class="row-inline" data-arow="${idx}" style="align-items:flex-end;">
@@ -816,7 +821,7 @@ function staffFormModal(){
               <div class="field" style="flex:1.4;"><label>Subject</label>
                 <select data-afield="subject" data-arow="${idx}">${SUBJECTS.map(s=>`<option value="${s}" ${s===a.subject?'selected':''}>${s}</option>`).join('')}</select>
               </div>
-              ${sfAssignments.length>1 ? `<button type="button" class="btn btn-outline" data-arow-remove="${idx}" style="margin-bottom:16px;">Remove</button>` : ''}
+              <button type="button" class="btn btn-outline" data-arow-remove="${idx}" style="margin-bottom:16px;">Remove</button>
             </div>`).join('')}
         </div>
         <button type="button" class="btn btn-outline" id="sfAddRow" style="margin-bottom:14px;">+ Add another class</button>
