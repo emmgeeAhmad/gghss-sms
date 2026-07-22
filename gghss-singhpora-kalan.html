@@ -357,7 +357,9 @@ async function loadDB(){
     if(snap.exists){
       DB = snap.data();
     } else {
-      DB = seedDB();
+      // Nothing in the shared database yet. Seed it with whatever this device
+      // already has (its own real data if present) rather than discarding that
+      // and starting over with the original placeholder data.
       await SCHOOL_DOC.set(DB);
     }
     firestoreReady = true;
