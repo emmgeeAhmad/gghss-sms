@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gghss-sms-v2';
+const CACHE_NAME = 'gghss-sms-v3';
 const ASSETS = [
   './gghss-singhpora-kalan.html',
   './manifest.json',
@@ -24,8 +24,12 @@ self.addEventListener('activate', (event) => {
 
 // Network-first: always try to get the latest version from the server first.
 // Only fall back to the cached copy if there's no internet connection.
+// IMPORTANT: only intercept requests to this same site — Firebase/Firestore's
+// own network traffic (live sync, streaming connections) must pass through
+// untouched, or real-time updates between devices can break.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

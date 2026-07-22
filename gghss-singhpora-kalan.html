@@ -251,6 +251,22 @@
 <div id="app"></div>
 <div id="certOverlay"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
+    authDomain: "gghss-singhpora-kalan-sms.firebaseapp.com",
+    projectId: "gghss-singhpora-kalan-sms",
+    storageBucket: "gghss-singhpora-kalan-sms.firebasestorage.app",
+    messagingSenderId: "1001470406359",
+    appId: "1:1001470406359:web:b3c277b667da5263bb0a92",
+    measurementId: "G-GRLC5GMK15"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const firestoreDB = firebase.firestore();
+  const SCHOOL_DOC = firestoreDB.collection('school').doc('main');
+</script>
 <script>
 /* ======================= DATA LAYER ======================= */
 const SCHOOL_NAME = "Government Girls Higher Secondary School";
@@ -317,25 +333,68 @@ function seedDB(){
   };
 }
 
+let firestoreReady = false;
+let firestoreUnsub = null;
+
+function anyModalOpen(){
+  return pwModalOpen || profileModalOpen || staffFormOpen || admFormOpen ||
+         certFormOpen || rcFormOpen || asgFormOpen || circFormOpen || acFormOpen ||
+         !!studentEditId;
+}
+
 async function loadDB(){
+  // Start from whatever this device last saw, so the app can render instantly
+  // and offline, while we fetch/subscribe to the shared copy in the background.
   try{
     const raw = localStorage.getItem('school_db');
-    if(raw){ DB = JSON.parse(raw); }
-    else { DB = seedDB(); await saveDB(); }
+    if(raw){ DB = JSON.parse(raw); } else { DB = seedDB(); }
   }catch(e){
     DB = seedDB();
-    await saveDB();
   }
+
+  try{
+    const snap = await SCHOOL_DOC.get();
+    if(snap.exists){
+      DB = snap.data();
+    } else {
+      DB = seedDB();
+      await SCHOOL_DOC.set(DB);
+    }
+    firestoreReady = true;
+  }catch(e){
+    console.warn('Could not reach the shared database yet, using this device\'s last saved copy.', e);
+  }
+
   // Ensure older saved data (from before these features existed) has the new collections.
   if(!DB.reportCards) DB.reportCards = [];
   if(!DB.assignments) DB.assignments = [];
   if(!DB.circulars) DB.circulars = [];
   if(!DB.accountEntries) DB.accountEntries = [];
   if(!DB.approvals) DB.approvals = [];
+
+  // Keep listening for changes made from other devices, and pull them in live.
+  if(firestoreUnsub) firestoreUnsub();
+  firestoreUnsub = SCHOOL_DOC.onSnapshot((snap)=>{
+    if(!snap.exists) return;
+    DB = snap.data();
+    if(!DB.reportCards) DB.reportCards = [];
+    if(!DB.assignments) DB.assignments = [];
+    if(!DB.circulars) DB.circulars = [];
+    if(!DB.accountEntries) DB.accountEntries = [];
+    if(!DB.approvals) DB.approvals = [];
+    try{ localStorage.setItem('school_db', JSON.stringify(DB)); }catch(e){}
+    if(session && !anyModalOpen()){ render(); }
+  }, (err)=> console.warn('Live sync listener error:', err));
 }
+
 async function saveDB(){
   try{ localStorage.setItem('school_db', JSON.stringify(DB)); }
-  catch(e){ console.error('Save failed', e); }
+  catch(e){ console.error('Local save failed', e); }
+  try{
+    await SCHOOL_DOC.set(DB);
+  }catch(e){
+    console.error('Could not save to the shared database — changes are only saved on this device for now.', e);
+  }
 }
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
 function readFileAsDataURL(file){
