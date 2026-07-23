@@ -1,0 +1,533 @@
+{
+  "appName": "GGHSS Singhpora Kalan — School Management System",
+  "backupVersion": 1,
+  "exportedDate": "2026-07-22T05:32:27.357Z",
+  "data": {
+    "circulars": [],
+    "assignments": [],
+    "marks": {},
+    "reportCards": [],
+    "admissions": [
+      {
+        "status": "Admitted",
+        "id": "a_oy45rdt",
+        "section": "A",
+        "className": "11",
+        "studentId": "s_v13ghbe",
+        "date": "2026-04-09",
+        "fatherName": "Gulshan Ahmad Magray",
+        "name": "Kafeela Gulshan"
+      },
+      {
+        "status": "Admitted",
+        "className": "11",
+        "studentId": "s_lacvroa",
+        "section": "A",
+        "id": "a_dsw0f5g",
+        "date": "2026-04-07",
+        "name": "Maleeha Irshad",
+        "fatherName": "Irshad Ahmad Khan"
+      },
+      {
+        "date": "2026-04-07",
+        "fatherName": "Mr Tariq Ahmad Bhat",
+        "name": "Aliena Tariq",
+        "status": "Admitted",
+        "studentId": "s_lllgew5",
+        "className": "11",
+        "section": "A",
+        "id": "a_p4p6hld"
+      }
+    ],
+    "accountEntries": [],
+    "approvals": [],
+    "users": [
+      {
+        "username": "principal",
+        "name": "Mr Harmohinder Singh Bali",
+        "password": "Chinar5277#",
+        "id": "u1",
+        "role": "principal"
+      },
+      {
+        "id": "u_qcmy67f",
+        "role": "teacher",
+        "username": "mgahmad",
+        "name": "Dr Gulshan Ahmad Magray",
+        "officeAccess": true,
+        "designation": "Teacher",
+        "password": "ahmad001#",
+        "assignments": [
+          {
+            "subject": "English",
+            "section": "A",
+            "className": "11"
+          }
+        ]
+      },
+      {
+        "role": "teacher",
+        "id": "u_ax9cq8k",
+        "password": "saqi@001",
+        "assignments": [
+          {
+            "subject": "Chemistry",
+            "className": "11",
+            "section": "A"
+          },
+          {
+            "section": "A",
+            "className": "12",
+            "subject": "Chemistry"
+          }
+        ],
+        "designation": "Senior Lecturer",
+        "officeAccess": false,
+        "name": "Mr Sheikh Saqib",
+        "username": "s_saqib"
+      },
+      {
+        "id": "u_mffwj53",
+        "role": "teacher",
+        "name": "Ms Afroza Manzoor",
+        "username": "afra_urdu",
+        "officeAccess": false,
+        "designation": "Senior Lecturer",
+        "assignments": [
+          {
+            "className": "11",
+            "section": "A",
+            "subject": "Urdu"
+          },
+          {
+            "subject": "Urdu",
+            "className": "12",
+            "section": "A"
+          }
+        ],
+        "password": "afra@404"
+      },
+      {
+        "officeAccess": false,
+        "username": "maqsooda",
+        "name": "Ms Maqsooda Akhter",
+        "password": "maqs@404",
+        "assignments": [
+          {
+            "className": "11",
+            "section": "A",
+            "subject": "Zoology"
+          },
+          {
+            "section": "A",
+            "className": "12",
+            "subject": "Zoology"
+          }
+        ],
+        "designation": "Teacher",
+        "id": "u_ryedzkg",
+        "role": "teacher"
+      },
+      {
+        "id": "u_hsr8px4",
+        "role": "teacher",
+        "name": "Ms Shaista Shameem",
+        "username": "shaya",
+        "officeAccess": false,
+        "designation": "Teacher",
+        "password": "shaya@123",
+        "assignments": [
+          {
+            "subject": "Botany",
+            "section": "A",
+            "className": "11"
+          }
+        ]
+      },
+      {
+        "id": "u_ft61kax",
+        "role": "teacher",
+        "name": "Ms Nayeema",
+        "username": "lone_naema",
+        "officeAccess": false,
+        "designation": "Teacher",
+        "assignments": [
+          {
+            "section": "A",
+            "className": "10",
+            "subject": "Urdu"
+          }
+        ],
+        "password": "naema@404"
+      },
+      {
+        "assignments": [
+          {
+            "section": "A",
+            "className": "11",
+            "subject": "Education"
+          }
+        ],
+        "password": "tariq@404",
+        "designation": "Lecturer",
+        "officeAccess": false,
+        "name": "Mr Tariq Ahmad Famda",
+        "username": "famda_tariq",
+        "role": "teacher",
+        "id": "u_lg6zlig"
+      },
+      {
+        "officeAccess": false,
+        "username": "bhat_maroof",
+        "name": "Mr Mohammad Maroof Bhat",
+        "assignments": [
+          {
+            "className": "11",
+            "section": "B",
+            "subject": "Physics"
+          }
+        ],
+        "password": "bhat@321",
+        "designation": "Lecturer",
+        "id": "u_ea0d1jz",
+        "role": "teacher"
+      },
+      {
+        "role": "teacher",
+        "id": "u_h6du0kj",
+        "assignments": [
+          {
+            "subject": "Urdu",
+            "section": "A",
+            "className": "9"
+          }
+        ],
+        "password": "mehm@404",
+        "designation": "Teacher",
+        "officeAccess": false,
+        "username": "mehmooda",
+        "name": "Ms Mehmooda Bano"
+      },
+      {
+        "id": "u_ghr34vn",
+        "role": "teacher",
+        "officeAccess": false,
+        "name": "Ms Mehjabeen Rukhsar",
+        "username": "rukhsar",
+        "assignments": [
+          {
+            "className": "12",
+            "section": "A",
+            "subject": "English"
+          }
+        ],
+        "password": "jabeen@123",
+        "designation": "Teacher"
+      },
+      {
+        "id": "u_ty94fa8",
+        "role": "teacher",
+        "officeAccess": false,
+        "username": "suman_k",
+        "name": "Ms Sumandeep Kour",
+        "assignments": [
+          {
+            "subject": "Biology",
+            "className": "10",
+            "section": "A"
+          }
+        ],
+        "password": "suman@404",
+        "designation": "Teacher"
+      },
+      {
+        "password": "nini@404",
+        "assignments": [
+          {
+            "className": "10",
+            "section": "A",
+            "subject": "English"
+          }
+        ],
+        "designation": "Teacher",
+        "officeAccess": false,
+        "username": "nini_k",
+        "name": "Ms Narinder Kour",
+        "role": "teacher",
+        "id": "u_zstcs2u"
+      },
+      {
+        "id": "u_uwt355y",
+        "role": "teacher",
+        "officeAccess": false,
+        "username": "sandi_k",
+        "name": "Ms Sandeep Kour",
+        "assignments": [
+          {
+            "className": "9",
+            "section": "A",
+            "subject": "English"
+          }
+        ],
+        "password": "sandi@321",
+        "designation": "Teacher"
+      },
+      {
+        "password": "nelam@123",
+        "assignments": [
+          {
+            "section": "A",
+            "className": "9",
+            "subject": "Social Science"
+          }
+        ],
+        "designation": "Teacher",
+        "officeAccess": false,
+        "username": "k_neelam",
+        "name": "Ms Neelam Kour",
+        "role": "teacher",
+        "id": "u_n5m8low"
+      },
+      {
+        "officeAccess": false,
+        "username": "sweety",
+        "name": "Ms Satbeer Kour",
+        "assignments": [
+          {
+            "subject": "Social Science",
+            "section": "A",
+            "className": "10"
+          }
+        ],
+        "password": "satbir@123",
+        "designation": "Teacher",
+        "id": "u_9kpymoe",
+        "role": "teacher"
+      },
+      {
+        "role": "teacher",
+        "id": "u_4foqjcx",
+        "designation": "Teacher",
+        "password": "fayaz@404",
+        "assignments": [
+          {
+            "subject": "Mathematics",
+            "section": "A",
+            "className": "10"
+          }
+        ],
+        "username": "ahmad_fayaz",
+        "name": "Ma Fayaz Ahmad Rather",
+        "officeAccess": false
+      },
+      {
+        "name": "Me Shafiq Ahmad Bhat",
+        "username": "bhat_shafiq",
+        "officeAccess": false,
+        "designation": "Teacher",
+        "password": "shafiq@101",
+        "assignments": [
+          {
+            "subject": "Statistics",
+            "className": "11",
+            "section": "A"
+          }
+        ],
+        "id": "u_cgphujf",
+        "role": "teacher"
+      },
+      {
+        "id": "u_116bvyt",
+        "role": "teacher",
+        "username": "sofi_tariq",
+        "name": "Mr Tariq Ahmad Sofi",
+        "officeAccess": false,
+        "designation": "Teacher",
+        "assignments": [
+          {
+            "subject": "Environmental Studies",
+            "section": "A",
+            "className": "11"
+          }
+        ],
+        "password": "sofi@101"
+      },
+      {
+        "designation": "Teacher",
+        "password": "sonu@b42",
+        "assignments": [
+          {
+            "subject": "Mathematics",
+            "section": "A",
+            "className": "11"
+          }
+        ],
+        "name": "Mr Sonu Bhat",
+        "username": "b_sonu",
+        "officeAccess": false,
+        "role": "teacher",
+        "id": "u_ls1iq6k"
+      },
+      {
+        "designation": "Librarian",
+        "password": "noor@123",
+        "assignments": [],
+        "username": "bakshi_noor",
+        "name": "Mr Noor Hussain Bakhshi",
+        "officeAccess": false,
+        "role": "teacher",
+        "id": "u_qo1ph0s"
+      },
+      {
+        "officeAccess": false,
+        "name": "Mr Vinod Koul",
+        "username": "k_vinod",
+        "password": "vinodk@123",
+        "assignments": [],
+        "designation": "Laboratory Assistant",
+        "id": "u_i62ynyu",
+        "role": "teacher"
+      },
+      {
+        "role": "teacher",
+        "id": "u_arprnqs",
+        "designation": "Teacher",
+        "password": "shahni@123",
+        "assignments": [],
+        "username": "nayima",
+        "name": "Ms Nayeema Bano",
+        "officeAccess": false
+      },
+      {
+        "id": "u_z3pwmvs",
+        "role": "teacher",
+        "username": "kajal_k",
+        "name": "Ms Harmahinder Kour",
+        "officeAccess": false,
+        "designation": "Laboratory Attendant",
+        "assignments": [],
+        "password": "kaj@al101"
+      },
+      {
+        "username": "sunny",
+        "name": "Mr Saminderpal Singh",
+        "officeAccess": false,
+        "designation": "Teacher",
+        "password": "sampal@123",
+        "assignments": [
+          {
+            "subject": "Computer Science",
+            "className": "9",
+            "section": "A"
+          }
+        ],
+        "id": "u_xrqyn8y",
+        "role": "teacher"
+      },
+      {
+        "id": "u_djlip3y",
+        "role": "teacher",
+        "officeAccess": false,
+        "username": "Ichpal",
+        "name": "Mr Ichpal Singh",
+        "assignments": [],
+        "password": "Ichu@pal",
+        "designation": "Laboratory Attendant"
+      }
+    ],
+    "students": [
+      {
+        "dob": "2010-03-14",
+        "className": "9",
+        "admissionDate": "2023-04-02",
+        "username": "aaliya.jan",
+        "fatherName": "Ghulam Nabi",
+        "motherName": "Shameema",
+        "admissionNo": "GGHSS-2023-0001",
+        "id": "s1",
+        "address": "Singhpora Kalan",
+        "section": "A",
+        "status": "left",
+        "password": "Zabarwan6109!",
+        "name": "Aaliya Jan",
+        "contact": "9797000001"
+      },
+      {
+        "name": "Insha Bashir",
+        "contact": "9797000002",
+        "address": "Singhpora Kalan",
+        "section": "A",
+        "admissionNo": "GGHSS-2023-0002",
+        "id": "s2",
+        "status": "left",
+        "password": "Kalan6383!",
+        "className": "9",
+        "dob": "2010-07-22",
+        "username": "insha.bashir",
+        "admissionDate": "2023-04-02",
+        "fatherName": "Bashir Ahmad",
+        "motherName": "Rubeena"
+      },
+      {
+        "motherName": "Ms. Rifat Maqbool",
+        "admissionDate": "2026-04-09",
+        "username": "kafeela",
+        "fatherName": "Dr. Gulshan Ahmad Magray",
+        "dob": "2009-10-28",
+        "className": "11",
+        "password": "kaifu01@",
+        "status": "active",
+        "admissionNo": "GGHSS-2026-530",
+        "id": "s_v13ghbe",
+        "section": "A",
+        "address": "Hudpora Wahdatpora",
+        "name": "Kafeela Gulshan",
+        "contact": "7006350674"
+      },
+      {
+        "dob": "2010-10-31",
+        "className": "11",
+        "admissionDate": "2026-04-07",
+        "username": "maleeha.irshad",
+        "fatherName": "Mr Irshad Ahmad Khan",
+        "motherName": "Ms. Shahzada Shaheen",
+        "admissionNo": "GGHSS-2026-528",
+        "id": "s_lacvroa",
+        "address": "Bimyar Boniyar",
+        "section": "A",
+        "status": "active",
+        "password": "student0004",
+        "contact": "Nil",
+        "name": "Maleeha Irshad"
+      },
+      {
+        "password": "student0005",
+        "status": "active",
+        "address": "",
+        "section": "A",
+        "id": "s_lllgew5",
+        "admissionNo": "GGHSS-2026-529",
+        "motherName": "Ms Maisarah Tariq",
+        "admissionDate": "2026-04-07",
+        "username": "aliena.tariq",
+        "fatherName": "Mr Tariq Ahmad Bhat",
+        "className": "11",
+        "dob": "2010-07-22",
+        "contact": "7006370780",
+        "name": "Aliena Tariq"
+      }
+    ],
+    "attendance": {},
+    "certificates": [
+      {
+        "type": "Character Certificate",
+        "id": "c_nt3vx1s",
+        "studentId": "s_v13ghbe",
+        "reason": "",
+        "issueDate": "2026-07-22",
+        "certNumber": "GGHSS/CC/2026/0001",
+        "studentName": "Kafeela Gulshan"
+      }
+    ]
+  }
+}
