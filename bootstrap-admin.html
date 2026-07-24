@@ -10,24 +10,25 @@
 <style>
   body{font-family:system-ui,-apple-system,sans-serif;background:#F6F1E4;color:#2A2A26;margin:0;padding:20px;max-width:520px;}
   h1{font-size:20px;color:#1B3A5C;}
+  h2{font-size:15px;color:#1B3A5C;margin-top:24px;}
   .note{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;margin-bottom:16px;font-size:13.5px;line-height:1.7;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px;}
   .field input{width:100%;padding:9px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:14px;}
-  .btn{background:#1B3A5C;color:#fff;border:none;padding:12px 22px;border-radius:5px;font-size:15px;cursor:pointer;font-weight:600;width:100%;}
-  .btn:disabled{background:#999;cursor:not-allowed;}
+  .btn{background:#1B3A5C;color:#fff;border:none;padding:12px 22px;border-radius:5px;font-size:15px;cursor:pointer;font-weight:600;width:100%;margin-bottom:10px;}
+  .btn.secondary{background:#fff;color:#1B3A5C;border:1px solid #1B3A5C;}
+  .btn:disabled{background:#999;cursor:not-allowed;border:none;}
   #status{margin-top:16px;padding:12px;border-radius:5px;font-size:13.5px;white-space:pre-wrap;}
   .status-ok{background:#e6f4ea;color:#1e7a34;}
   .status-err{background:#fdecea;color:#b3261e;}
   .status-info{background:#eaf1fb;color:#1B3A5C;}
+  #recoverSection{display:none;border-top:2px solid #D68A2C;padding-top:16px;margin-top:20px;}
 </style>
 </head>
 <body>
 <h1>First-Time Administrator Setup</h1>
 <div class="note">
-  Use this once, to create (or repair) the Principal's real, secure login. After this, use the
-  main app link to sign in as usual. This is safe to run more than once — if the Principal
-  account already has a working login, it will tell you instead of creating a duplicate.
+  Use this once, to create (or repair) the Principal's real, secure login. Safe to run more than once.
 </div>
 
 <div class="field"><label>Username</label><input id="username" value="principal"></div>
@@ -36,6 +37,18 @@
 
 <button class="btn" id="setupBtn">Set up administrator login</button>
 <div id="status"></div>
+
+<div id="recoverSection">
+  <h2>This email already has a login — let's recover it</h2>
+  <div class="note">
+    A login for this email already exists (probably from an earlier attempt), but it isn't linked up yet.
+    Click below to get a password reset link sent to this email, then come back here, enter the <b>new</b>
+    password you set, and click "Finish setup using this password."
+  </div>
+  <button class="btn secondary" id="sendResetBtn">Send password reset email</button>
+  <div class="field"><label>New password (after resetting it via email)</label><input id="recoveredPassword" type="password"></div>
+  <button class="btn" id="finishRecoveryBtn">Finish setup using this password</button>
+</div>
 
 <script>
   const firebaseConfig = {
@@ -52,6 +65,31 @@
   const auth = firebase.auth();
   const SCHOOL_DOC = db.collection('school').doc('main');
 
+  async function linkAccount(uid, username, email){
+    const snap = await SCHOOL_DOC.get();
+    let DB = snap.exists ? snap.data() : {
+      users:[], students:[], admissions:[], attendance:{}, marks:{}, certificates:[],
+      reportCards:[], assignments:[], circulars:[], accountEntries:[], approvals:[]
+    };
+    if(!DB.users) DB.users = [];
+
+    let principalRecord = DB.users.find(u=>u.role==='principal');
+    if(!principalRecord){
+      principalRecord = {id:'u_' + Math.random().toString(36).slice(2,9), username, role:'principal', name:'Principal'};
+      DB.users.push(principalRecord);
+    }
+    principalRecord.username = username;
+    principalRecord.email = email;
+    principalRecord.authUid = uid;
+    delete principalRecord.password;
+
+    await db.collection('profiles').doc(uid).set({
+      role:'principal', name:principalRecord.name, username, linkedId:principalRecord.id
+    });
+    await db.collection('usernameIndex').doc(username).set({email, uid});
+    await SCHOOL_DOC.set(DB);
+  }
+
   document.getElementById('setupBtn').onclick = async ()=>{
     const btn = document.getElementById('setupBtn');
     const statusEl = document.getElementById('status');
@@ -67,61 +105,76 @@
     statusEl.textContent = 'Checking the shared database…';
 
     try{
-      // Step 1: is this username already linked to a working login?
       const idxSnap = await db.collection('usernameIndex').doc(username).get();
       if(idxSnap.exists){
         statusEl.className = 'status-ok';
-        statusEl.textContent = `A login already exists for "${username}" (${idxSnap.data().email}). If you don't know the password, open the main app and use "Forgot password?" instead — don't run this tool again for this username.`;
+        statusEl.textContent = `A login already exists for "${username}" (${idxSnap.data().email}). If you don't know the password, open the main app and use "Forgot password?" instead.`;
         btn.disabled = false; btn.textContent = 'Set up administrator login';
         return;
       }
 
-      // Step 2: read (or create) the shared school data document
-      statusEl.textContent = 'Reading school records…';
-      const snap = await SCHOOL_DOC.get();
-      let DB;
-      if(snap.exists){
-        DB = snap.data();
-      } else {
-        DB = { users:[], students:[], admissions:[], attendance:{}, marks:{}, certificates:[],
-               reportCards:[], assignments:[], circulars:[], accountEntries:[], approvals:[] };
-      }
-      if(!DB.users) DB.users = [];
-
-      // Step 3: find or create the principal's record in the shared data
-      let principalRecord = DB.users.find(u=>u.role==='principal');
-      if(!principalRecord){
-        principalRecord = {id:'u_' + Math.random().toString(36).slice(2,9), username, role:'principal', name:'Principal'};
-        DB.users.push(principalRecord);
-      }
-
-      // Step 4: create the real login
       statusEl.textContent = 'Creating your secure login…';
       const cred = await auth.createUserWithEmailAndPassword(email, password);
       const uid = cred.user.uid;
 
-      principalRecord.username = username;
-      principalRecord.email = email;
-      principalRecord.authUid = uid;
-      delete principalRecord.password;
-
       statusEl.textContent = 'Saving profile…';
-      await db.collection('profiles').doc(uid).set({
-        role:'principal', name:principalRecord.name, username, linkedId:principalRecord.id
-      });
-      await db.collection('usernameIndex').doc(username).set({email, uid});
-      await SCHOOL_DOC.set(DB);
-
-      // Sign out of this tool's session so the main app's own login screen is what's used next.
+      await linkAccount(uid, username, email);
       await auth.signOut();
 
       statusEl.className = 'status-ok';
       statusEl.textContent = `Done. You can now open the main app and log in with:\nUsername: ${username}\nPassword: (the one you just chose)\n\nOnce logged in, use "Edit Profile" to set your real name, and "Manage Staff" to add other staff members.`;
       btn.textContent = 'Setup complete';
     }catch(e){
+      if(e.code === 'auth/email-already-in-use'){
+        statusEl.className = 'status-err';
+        statusEl.textContent = 'This email already has a login from an earlier attempt that didn\'t finish. Use the recovery section below to fix it.';
+        document.getElementById('recoverSection').style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Set up administrator login';
+        return;
+      }
       statusEl.className = 'status-err';
       statusEl.textContent = 'Setup failed: ' + e.message + (e.code ? ' (' + e.code + ')' : '');
       btn.disabled = false; btn.textContent = 'Set up administrator login';
+    }
+  };
+
+  document.getElementById('sendResetBtn').onclick = async ()=>{
+    const email = document.getElementById('email').value.trim();
+    const statusEl = document.getElementById('status');
+    try{
+      await auth.sendPasswordResetEmail(email);
+      statusEl.className = 'status-ok';
+      statusEl.textContent = `A password reset email has been sent to ${email}. Open it, set a new password, then come back here, type that new password below, and click "Finish setup using this password."`;
+    }catch(e){
+      statusEl.className = 'status-err';
+      statusEl.textContent = 'Could not send reset email: ' + e.message + (e.code ? ' ('+e.code+')' : '');
+    }
+  };
+
+  document.getElementById('finishRecoveryBtn').onclick = async ()=>{
+    const btn = document.getElementById('finishRecoveryBtn');
+    const statusEl = document.getElementById('status');
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('recoveredPassword').value;
+    if(!password){ statusEl.className='status-err'; statusEl.textContent='Please enter the new password you just set.'; return; }
+
+    btn.disabled = true; btn.textContent = 'Working…';
+    statusEl.className = 'status-info';
+    statusEl.textContent = 'Signing in to the existing account…';
+    try{
+      const cred = await auth.signInWithEmailAndPassword(email, password);
+      const uid = cred.user.uid;
+      statusEl.textContent = 'Linking this account to your username…';
+      await linkAccount(uid, username, email);
+      await auth.signOut();
+      statusEl.className = 'status-ok';
+      statusEl.textContent = `Done. You can now open the main app and log in with:\nUsername: ${username}\nPassword: (the password you just reset it to)`;
+      btn.textContent = 'Setup complete';
+    }catch(e){
+      statusEl.className = 'status-err';
+      statusEl.textContent = 'Could not sign in: ' + e.message + (e.code ? ' ('+e.code+')' : '') + '\n\nMake sure you entered the exact new password you set after clicking the reset link.';
+      btn.disabled = false; btn.textContent = 'Finish setup using this password';
     }
   };
 </script>
