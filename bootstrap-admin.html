@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>First-Time Administrator Setup — GGHSS Singhpora Kalan</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#F6F1E4;color:#2A2A26;margin:0;padding:20px;max-width:520px;}
+  h1{font-size:20px;color:#1B3A5C;}
+  .note{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;margin-bottom:16px;font-size:13.5px;line-height:1.7;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px;}
+  .field input{width:100%;padding:9px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:14px;}
+  .btn{background:#1B3A5C;color:#fff;border:none;padding:12px 22px;border-radius:5px;font-size:15px;cursor:pointer;font-weight:600;width:100%;}
+  .btn:disabled{background:#999;cursor:not-allowed;}
+  #status{margin-top:16px;padding:12px;border-radius:5px;font-size:13.5px;white-space:pre-wrap;}
+  .status-ok{background:#e6f4ea;color:#1e7a34;}
+  .status-err{background:#fdecea;color:#b3261e;}
+  .status-info{background:#eaf1fb;color:#1B3A5C;}
+</style>
+</head>
+<body>
+<h1>First-Time Administrator Setup</h1>
+<div class="note">
+  Use this once, to create (or repair) the Principal's real, secure login. After this, use the
+  main app link to sign in as usual. This is safe to run more than once — if the Principal
+  account already has a working login, it will tell you instead of creating a duplicate.
+</div>
+
+<div class="field"><label>Username</label><input id="username" value="principal"></div>
+<div class="field"><label>Email address</label><input id="email" type="email" value="gulshanmagray@gmail.com"></div>
+<div class="field"><label>Choose a password (min. 6 characters)</label><input id="password" type="password"></div>
+
+<button class="btn" id="setupBtn">Set up administrator login</button>
+<div id="status"></div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
+    authDomain: "gghss-singhpora-kalan-sms.firebaseapp.com",
+    projectId: "gghss-singhpora-kalan-sms",
+    storageBucket: "gghss-singhpora-kalan-sms.firebasestorage.app",
+    messagingSenderId: "1001470406359",
+    appId: "1:1001470406359:web:b3c277b667da5263bb0a92",
+    measurementId: "G-GRLC5GMK15"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const auth = firebase.auth();
+  const SCHOOL_DOC = db.collection('school').doc('main');
+
+  document.getElementById('setupBtn').onclick = async ()=>{
+    const btn = document.getElementById('setupBtn');
+    const statusEl = document.getElementById('status');
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    if(!username || !email){ statusEl.className='status-err'; statusEl.textContent='Please fill in username and email.'; return; }
+    if(!password || password.length < 6){ statusEl.className='status-err'; statusEl.textContent='Please choose a password of at least 6 characters.'; return; }
+
+    btn.disabled = true; btn.textContent = 'Working…';
+    statusEl.className = 'status-info';
+    statusEl.textContent = 'Checking the shared database…';
+
+    try{
+      // Step 1: is this username already linked to a working login?
+      const idxSnap = await db.collection('usernameIndex').doc(username).get();
+      if(idxSnap.exists){
+        statusEl.className = 'status-ok';
+        statusEl.textContent = `A login already exists for "${username}" (${idxSnap.data().email}). If you don't know the password, open the main app and use "Forgot password?" instead — don't run this tool again for this username.`;
+        btn.disabled = false; btn.textContent = 'Set up administrator login';
+        return;
+      }
+
+      // Step 2: read (or create) the shared school data document
+      statusEl.textContent = 'Reading school records…';
+      const snap = await SCHOOL_DOC.get();
+      let DB;
+      if(snap.exists){
+        DB = snap.data();
+      } else {
+        DB = { users:[], students:[], admissions:[], attendance:{}, marks:{}, certificates:[],
+               reportCards:[], assignments:[], circulars:[], accountEntries:[], approvals:[] };
+      }
+      if(!DB.users) DB.users = [];
+
+      // Step 3: find or create the principal's record in the shared data
+      let principalRecord = DB.users.find(u=>u.role==='principal');
+      if(!principalRecord){
+        principalRecord = {id:'u_' + Math.random().toString(36).slice(2,9), username, role:'principal', name:'Principal'};
+        DB.users.push(principalRecord);
+      }
+
+      // Step 4: create the real login
+      statusEl.textContent = 'Creating your secure login…';
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      const uid = cred.user.uid;
+
+      principalRecord.username = username;
+      principalRecord.email = email;
+      principalRecord.authUid = uid;
+      delete principalRecord.password;
+
+      statusEl.textContent = 'Saving profile…';
+      await db.collection('profiles').doc(uid).set({
+        role:'principal', name:principalRecord.name, username, linkedId:principalRecord.id
+      });
+      await db.collection('usernameIndex').doc(username).set({email, uid});
+      await SCHOOL_DOC.set(DB);
+
+      // Sign out of this tool's session so the main app's own login screen is what's used next.
+      await auth.signOut();
+
+      statusEl.className = 'status-ok';
+      statusEl.textContent = `Done. You can now open the main app and log in with:\nUsername: ${username}\nPassword: (the one you just chose)\n\nOnce logged in, use "Edit Profile" to set your real name, and "Manage Staff" to add other staff members.`;
+      btn.textContent = 'Setup complete';
+    }catch(e){
+      statusEl.className = 'status-err';
+      statusEl.textContent = 'Setup failed: ' + e.message + (e.code ? ' (' + e.code + ')' : '');
+      btn.disabled = false; btn.textContent = 'Set up administrator login';
+    }
+  };
+</script>
+</body>
+</html>
