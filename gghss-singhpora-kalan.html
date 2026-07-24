@@ -248,11 +248,20 @@
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#1B3A5C;color:#F6F1E4;font-family:'Fraunces',serif;text-align:center;padding:20px;">
+    <div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:10px;">GGHSS Singhpora Kalan</div>
+      <div style="font-size:13px;opacity:0.8;">Loading…</div>
+      <div style="font-size:11.5px;opacity:0.55;margin-top:40px;letter-spacing:.03em;">Designed and developed by Emm Gee Ahmad</div>
+    </div>
+  </div>
+</div>
 <div id="certOverlay"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
@@ -266,6 +275,10 @@
   firebase.initializeApp(firebaseConfig);
   const firestoreDB = firebase.firestore();
   const SCHOOL_DOC = firestoreDB.collection('school').doc('main');
+  const auth = firebase.auth();
+  const STUDENT_EMAIL_DOMAIN = 'gghss-students.local';
+  const secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary');
+  const secondaryAuth = secondaryApp.auth();
 </script>
 <script>
 /* ======================= DATA LAYER ======================= */
@@ -288,19 +301,17 @@ const DESIGNATIONS = [
 const CERT_TYPES = ["Bonafide Certificate","Transfer Certificate","Character Certificate","Provisional Certificate"];
 
 let DB = null;
-let session = null; // {id, username, role, name, ...}
+let session = null; // {id (Firebase Auth uid), username, role, name, ...}
 
-function saveSession(){
+async function loadProfileForUser(user){
   try{
-    if(session) localStorage.setItem('school_session', JSON.stringify(session));
-    else localStorage.removeItem('school_session');
-  }catch(e){ console.warn('Could not persist session', e); }
-}
-function restoreSession(){
-  try{
-    const raw = localStorage.getItem('school_session');
-    if(raw) session = JSON.parse(raw);
-  }catch(e){ session = null; }
+    const profSnap = await firestoreDB.collection('profiles').doc(user.uid).get();
+    if(!profSnap.exists) return null;
+    return {...profSnap.data(), id:user.uid};
+  }catch(e){
+    console.error('Could not load profile for logged-in user', e);
+    return null;
+  }
 }
 let route = "dashboard";
 let flashError = "";
@@ -308,16 +319,16 @@ let flashError = "";
 function seedDB(){
   return {
     users:[
-      {id:"u1", username:"principal", password:"Chinar5277#", role:"principal", name:"Dr Emm Gee Ahmad"},
-      {id:"u2", username:"teacher1", password:"Saffron6776#", role:"teacher", name:"Mrs. Nusrat Jan", designation:"Senior Lecturer",
+      {id:"u1", username:"principal", role:"principal", name:"Dr Emm Gee Ahmad"},
+      {id:"u2", username:"teacher1", role:"teacher", name:"Mrs. Nusrat Jan", designation:"Senior Lecturer",
         assignments:[{className:"9", section:"A", subject:"Science"}, {className:"11", section:"A", subject:"Physics"}, {className:"12", section:"A", subject:"Physics"}]},
-      {id:"u3", username:"office1", password:"Zabarwan8457!", role:"office", name:"Mr. Bilal Ahmad (Office)"},
-      {id:"u4", username:"accounts1", password:"Shalimar7833@", role:"accounts", name:"Mr. Tariq Hussain (Accounts)"}
+      {id:"u3", username:"office1", role:"office", name:"Mr. Bilal Ahmad (Office)"},
+      {id:"u4", username:"accounts1", role:"accounts", name:"Mr. Tariq Hussain (Accounts)"}
     ],
     students:[
-      {id:"s1", admissionNo:"GGHSS-2023-0001", name:"Aaliya Jan", fatherName:"Ghulam Nabi", motherName:"Shameema", dob:"2010-03-14", className:"9", section:"A", address:"Singhpora Kalan", contact:"9797000001", admissionDate:"2023-04-02", status:"active", username:"aaliya.jan", password:"Zabarwan6109!"},
-      {id:"s2", admissionNo:"GGHSS-2023-0002", name:"Insha Bashir", fatherName:"Bashir Ahmad", motherName:"Rubeena", dob:"2010-07-22", className:"9", section:"A", address:"Singhpora Kalan", contact:"9797000002", admissionDate:"2023-04-02", status:"active", username:"insha.bashir", password:"Kalan6383!"},
-      {id:"s3", admissionNo:"GGHSS-2023-0003", name:"Mehak Farooq", fatherName:"Farooq Ahmad", motherName:"Yasmeena", dob:"2009-11-05", className:"10", section:"A", address:"Singhpora Kalan", contact:"9797000003", admissionDate:"2022-04-05", status:"active", username:"mehak.farooq", password:"Kalan6691#"}
+      {id:"s1", admissionNo:"GGHSS-2023-0001", name:"Aaliya Jan", fatherName:"Ghulam Nabi", motherName:"Shameema", dob:"2010-03-14", className:"9", section:"A", address:"Singhpora Kalan", contact:"9797000001", admissionDate:"2023-04-02", status:"active", username:"aaliya.jan"},
+      {id:"s2", admissionNo:"GGHSS-2023-0002", name:"Insha Bashir", fatherName:"Bashir Ahmad", motherName:"Rubeena", dob:"2010-07-22", className:"9", section:"A", address:"Singhpora Kalan", contact:"9797000002", admissionDate:"2023-04-02", status:"active", username:"insha.bashir"},
+      {id:"s3", admissionNo:"GGHSS-2023-0003", name:"Mehak Farooq", fatherName:"Farooq Ahmad", motherName:"Yasmeena", dob:"2009-11-05", className:"10", section:"A", address:"Singhpora Kalan", contact:"9797000003", admissionDate:"2022-04-05", status:"active", username:"mehak.farooq"}
     ],
     admissions:[
       {id:"a1", name:"Mehak Farooq", fatherName:"Farooq Ahmad", className:"10", section:"A", date:"2022-04-05", status:"Admitted", studentId:"s3"}
@@ -410,6 +421,30 @@ function readFileAsDataURL(file){
   });
 }
 
+// Creates a real Firebase Auth login for a new user, using the secondary app
+// instance so it never disturbs whoever (e.g. the Principal) is currently
+// signed in on the main app instance. Also writes the profile + username
+// lookup documents that the rest of the app relies on.
+async function createAuthAccount({username, email, password, profile, allowExistingUsername}){
+  if(!allowExistingUsername){
+    if(DB.students.some(s=>s.username===username) || DB.users.some(u=>u.username===username)){
+      throw new Error('That username is already taken.');
+    }
+    const idxSnap = await firestoreDB.collection('usernameIndex').doc(username).get();
+    if(idxSnap.exists){ throw new Error('That username is already taken.'); }
+  }
+
+  const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+  const uid = cred.user.uid;
+  try{
+    await firestoreDB.collection('profiles').doc(uid).set(profile);
+    await firestoreDB.collection('usernameIndex').doc(username).set({email, uid});
+  } finally {
+    await secondaryAuth.signOut();
+  }
+  return uid;
+}
+
 /* ======================= HELPERS ======================= */
 function studentsOf(cls, sec){
   return DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
@@ -460,6 +495,8 @@ function render(){
 /* ======================= LOGIN VIEW ======================= */
 let loginRole = "principal";
 let forgotOpen = false;
+let studentRegisterOpen = false;
+let registerError = "";
 function loginView(){
   return `
   <div class="login-wrap">
@@ -493,13 +530,34 @@ function loginView(){
         <form id="loginForm">
           <div class="field"><label>Username</label><input type="text" id="loginUser" autocomplete="username" required></div>
           <div class="field"><label>Password</label><input type="password" id="loginPass" autocomplete="current-password" required></div>
-          <button type="submit" class="btn btn-primary btn-block">Log in</button>
+          <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn">Log in</button>
         </form>
-        <div style="margin-top:10px;"><button class="link-btn" id="forgotBtn" type="button">Forgot password?</button></div>
-        ${forgotOpen ? `<div class="err-box" style="background:var(--cream);color:var(--ink-soft);border-color:var(--line);">
-          Students and staff: ask your class teacher, the school office, or the Principal to reset your password
-          for you from their panel. Principals: since this app stores data only in this browser, a password reset
-          needs someone with direct access to the app's records — there's no email-based recovery here.
+        <div style="margin-top:10px;display:flex;gap:14px;flex-wrap:wrap;">
+          <button class="link-btn" id="forgotBtn" type="button">Forgot password?</button>
+          <button class="link-btn" id="registerBtn" type="button">New student? Register here</button>
+        </div>
+        ${forgotOpen ? `
+        <div class="err-box" style="background:var(--cream);color:var(--ink-soft);border-color:var(--line);">
+          <b>Staff (Principal, Teacher, Office, Accounts):</b> enter your username above, then tap the button below —
+          if your account has a registered email, a reset link will be sent to it.<br>
+          <button class="btn btn-outline" id="sendResetBtn" type="button" style="margin-top:8px;">Send password reset email</button>
+          <div style="margin-top:10px;">
+            <b>Students:</b> ask the school office or Principal to reset your login for you.
+          </div>
+        </div>` : ''}
+        ${studentRegisterOpen ? `
+        <div class="err-box" style="background:var(--cream);color:var(--ink-soft);border-color:var(--line);">
+          <b>Student registration</b>
+          <div class="note" style="margin-bottom:10px;">
+            Enter your details exactly as they appear in the school's admission record to verify your identity.
+          </div>
+          ${registerError ? `<div class="err-box">${esc(registerError)}</div>` : ''}
+          <div class="field"><label>Full name</label><input id="regName"></div>
+          <div class="field"><label>Admission number</label><input id="regAdmNo"></div>
+          <div class="field"><label>Date of birth</label><input type="date" id="regDob"></div>
+          <div class="field"><label>Choose a username</label><input id="regUsername"></div>
+          <div class="field"><label>Choose a password (min. 6 characters)</label><input type="password" id="regPassword"></div>
+          <button class="btn btn-primary" id="registerSubmitBtn" type="button" style="margin-top:8px;">Create my login</button>
         </div>` : ''}
       </div>
     </div>
@@ -511,19 +569,84 @@ function attachLoginHandlers(){
   });
   const forgotBtn = document.getElementById('forgotBtn');
   if(forgotBtn) forgotBtn.onclick = ()=>{ forgotOpen = !forgotOpen; render(); };
-  document.getElementById('loginForm').onsubmit = (e)=>{
+  const registerBtn = document.getElementById('registerBtn');
+  if(registerBtn) registerBtn.onclick = ()=>{ studentRegisterOpen = !studentRegisterOpen; registerError=""; render(); };
+  const registerSubmitBtn = document.getElementById('registerSubmitBtn');
+  if(registerSubmitBtn) registerSubmitBtn.onclick = async ()=>{
+    const name = document.getElementById('regName').value.trim();
+    const admissionNo = document.getElementById('regAdmNo').value.trim();
+    const dob = document.getElementById('regDob').value;
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value;
+
+    if(!name || !admissionNo || !dob){ registerError = "Please fill in your name, admission number and date of birth."; render(); return; }
+    if(!username){ registerError = "Please choose a username."; render(); return; }
+    if(!password || password.length < 6){ registerError = "Password must be at least 6 characters."; render(); return; }
+
+    const match = DB.students.find(s=>
+      s.status!=='left' &&
+      s.admissionNo.trim().toLowerCase()===admissionNo.toLowerCase() &&
+      s.name.trim().toLowerCase()===name.toLowerCase() &&
+      s.dob===dob
+    );
+    if(!match){ registerError = "No matching admission record found. Please check your details, or contact the school office."; render(); return; }
+    if(match.authUid){ registerError = "This student already has a login. Use the login form above, or ask the Principal to reset it if you've forgotten your password."; render(); return; }
+
+    registerSubmitBtn.disabled = true; registerSubmitBtn.textContent = 'Creating your login…';
+    try{
+      const email = `${username}@${STUDENT_EMAIL_DOMAIN}`;
+      const authUid = await createAuthAccount({
+        username, email, password,
+        profile: {role:'student', name:match.name, username, linkedId:match.id, className:match.className, section:match.section, admissionNo:match.admissionNo}
+      });
+      match.username = username;
+      match.authUid = authUid;
+      await saveDB();
+      studentRegisterOpen = false; registerError = "";
+      render();
+      alert('Your login has been created. You can now log in with your new username and password.');
+    }catch(e){
+      registerError = "Could not create your login: " + e.message;
+      registerSubmitBtn.disabled = false; registerSubmitBtn.textContent = 'Create my login';
+      render();
+    }
+  };
+  const sendResetBtn = document.getElementById('sendResetBtn');
+  if(sendResetBtn) sendResetBtn.onclick = async ()=>{
+    const u = document.getElementById('loginUser').value.trim();
+    if(!u){ alert('Please type your username above first.'); return; }
+    try{
+      const idxSnap = await firestoreDB.collection('usernameIndex').doc(u).get();
+      if(!idxSnap.exists){ alert('No account found with that username.'); return; }
+      const email = idxSnap.data().email;
+      if(!email || email.endsWith('@' + STUDENT_EMAIL_DOMAIN)){
+        alert('This account has no registered email. Please ask the school office or Principal to reset it for you.');
+        return;
+      }
+      await auth.sendPasswordResetEmail(email);
+      alert('A password reset email has been sent. Please check your inbox.');
+    }catch(e){
+      alert('Could not send reset email: ' + e.message);
+    }
+  };
+  document.getElementById('loginForm').onsubmit = async (e)=>{
     e.preventDefault();
     const u = document.getElementById('loginUser').value.trim();
     const p = document.getElementById('loginPass').value;
-    if(loginRole==='student'){
-      const foundStudent = DB.students.find(x=>x.status!=='left' && x.username===u && x.password===p);
-      if(foundStudent){ session = {...foundStudent, role:'student'}; flashError=""; route="dashboard"; saveSession(); render(); }
-      else{ flashError = "Incorrect username, password, or role selected."; render(); }
-      return;
+    const btn = document.getElementById('loginSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Logging in…';
+    try{
+      const idxSnap = await firestoreDB.collection('usernameIndex').doc(u).get();
+      if(!idxSnap.exists){ throw new Error('WRONG'); }
+      const email = idxSnap.data().email;
+      await auth.signInWithEmailAndPassword(email, p);
+      // onAuthStateChanged (set up in init) takes over from here: it loads the
+      // profile, sets `session`, and renders the dashboard.
+    }catch(err){
+      flashError = "Incorrect username, password, or account not found.";
+      btn.disabled = false; btn.textContent = 'Log in';
+      render();
     }
-    const found = DB.users.find(x=>x.username===u && x.password===p && x.role===loginRole);
-    if(found){ session = found; flashError=""; route="dashboard"; saveSession(); render(); }
-    else{ flashError = "Incorrect username, password, or role selected."; render(); }
   };
 }
 
@@ -650,7 +773,7 @@ function attachShellHandlers(){
   if(hamburger) hamburger.onclick = ()=>{ mobileNavOpen = !mobileNavOpen; render(); };
   const overlay = document.getElementById('sbOverlay');
   if(overlay) overlay.onclick = ()=>{ mobileNavOpen = false; render(); };
-  document.getElementById('logoutBtn').onclick = ()=>{ session=null; route="dashboard"; mobileNavOpen=false; saveSession(); render(); };
+  document.getElementById('logoutBtn').onclick = async ()=>{ await auth.signOut(); };
   document.getElementById('changePwBtn').onclick = ()=>{ pwModalOpen=true; pwError=""; render(); };
   document.getElementById('editProfileBtn').onclick = ()=>{ profileModalOpen=true; profileError=""; render(); };
   const profCancel = document.getElementById('profCancel');
@@ -659,15 +782,19 @@ function attachShellHandlers(){
   if(profSave) profSave.onclick = async ()=>{
     const newName = document.getElementById('profName').value.trim();
     if(!newName){ profileError = "Name can't be empty."; render(); return; }
-    const record = session.role==='student'
-      ? DB.students.find(s=>s.id===session.id)
-      : DB.users.find(u=>u.id===session.id);
-    if(record){ record.name = newName; }
-    session.name = newName;
-    saveSession();
-    await saveDB();
-    profileModalOpen = false; profileError = "";
-    render();
+    try{
+      await firestoreDB.collection('profiles').doc(session.id).update({name:newName});
+      const record = session.role==='student'
+        ? DB.students.find(s=>s.id===session.linkedId)
+        : DB.users.find(u=>u.id===session.linkedId);
+      if(record){ record.name = newName; await saveDB(); }
+      session.name = newName;
+      profileModalOpen = false; profileError = "";
+      render();
+    }catch(e){
+      profileError = "Could not save: " + e.message;
+      render();
+    }
   };
   const cancel = document.getElementById('pwCancel');
   if(cancel) cancel.onclick = ()=>{ pwModalOpen=false; pwError=""; render(); };
@@ -676,18 +803,19 @@ function attachShellHandlers(){
     const cur = document.getElementById('pwCurrent').value;
     const next = document.getElementById('pwNew').value;
     const confirmNext = document.getElementById('pwConfirm').value;
-    if(cur !== session.password){ pwError = "Current password is incorrect."; render(); return; }
     if(!next || next.length < 6){ pwError = "New password must be at least 6 characters."; render(); return; }
     if(next !== confirmNext){ pwError = "New password and confirmation don't match."; render(); return; }
-    const record = session.role==='student'
-      ? DB.students.find(s=>s.id===session.id)
-      : DB.users.find(u=>u.id===session.id);
-    if(record){ record.password = next; }
-    session.password = next;
-    saveSession();
-    await saveDB();
-    pwModalOpen = false; pwError = "";
-    render();
+    try{
+      const cred = firebase.auth.EmailAuthProvider.credential(auth.currentUser.email, cur);
+      await auth.currentUser.reauthenticateWithCredential(cred);
+      await auth.currentUser.updatePassword(next);
+      pwModalOpen = false; pwError = "";
+      render();
+      alert('Password changed successfully.');
+    }catch(e){
+      pwError = e.code==='auth/wrong-password' ? "Current password is incorrect." : ("Could not change password: " + e.message);
+      render();
+    }
     alert('Password changed successfully.');
   };
   attachRouteHandlers();
@@ -760,8 +888,9 @@ function dashboardView(){
     </div>`;
   }
   if(session.role==='teacher'){
-    const myStudents = teacherStudents(session);
-    const classOpts = teacherClassOptions(session);
+    const staffRecord = DB.users.find(u=>u.id===session.linkedId) || session;
+    const myStudents = teacherStudents(staffRecord);
+    const classOpts = teacherClassOptions(staffRecord);
     const classList = classOpts.map(c=>`Class ${c.className}-${c.section}`).join(', ') || '—';
     return `
     <div class="grid grid-3" style="margin-bottom:22px;">
@@ -779,7 +908,7 @@ function dashboardView(){
     </div>`;
   }
   if(session.role==='student'){
-    const student = DB.students.find(s=>s.id===session.id) || session;
+    const student = DB.students.find(s=>s.id===session.linkedId) || session;
     const prefix = `${student.className}-${student.section}-`;
     let present=0, marked=0;
     Object.keys(DB.attendance).forEach(k=>{
@@ -873,9 +1002,14 @@ function staffFormModal(){
       <h3>${editing ? 'Edit staff account' : 'Add staff account'}</h3>
       <div class="field"><label>Full name</label><input id="sfName" value="${editing ? esc(editing.name) : ''}" placeholder="e.g. Mrs. Farida Begum"></div>
       <div class="row-inline">
-        <div class="field"><label>Username</label><input id="sfUser" value="${editing ? esc(editing.username) : ''}"></div>
-        <div class="field"><label>${editing ? 'New password (leave blank to keep current)' : 'Password'}</label><input id="sfPass" placeholder="${editing ? '' : ''}"></div>
+        <div class="field"><label>Username</label><input id="sfUser" value="${editing ? esc(editing.username) : ''}" ${editing ? 'disabled' : ''}></div>
+        <div class="field"><label>Email address</label><input id="sfEmail" type="email" value="${editing ? esc(editing.email||'') : ''}" placeholder="name@example.com"></div>
       </div>
+      ${!editing ? `<div class="field"><label>Initial password (min. 6 characters)</label><input id="sfPass" type="password"></div>
+      <div class="note">The staff member can change this themselves later, or use "Forgot password" on the login screen (needs their email above).</div>` : `
+      <div class="note">Password can no longer be reset here directly — use "Send password reset email" below, which emails them a secure reset link.</div>
+      <button type="button" class="btn btn-outline" id="sfSendReset" style="margin-bottom:14px;">Send password reset email</button>
+      `}
       ${editing ? `
         <div class="note" style="margin-bottom:10px;">Role: <b style="text-transform:capitalize;">${role}</b> (can't be changed here — remove and re-add the account to change role)</div>
       ` : `
@@ -949,20 +1083,21 @@ function attachStaffHandlers(){
     b.onclick = async ()=>{
       const u = DB.users.find(x=>x.id===b.dataset.reset);
       if(!u) return;
-      const newPass = prompt(`Enter a new password for ${u.name} (min 6 characters):`);
-      if(newPass===null) return;
-      if(newPass.length < 6){ alert('Password must be at least 6 characters.'); return; }
+      if(!u.email){ alert(`${u.name} has no email on file. Edit their account to add one first.`); return; }
       if(session.role==='accounts'){
         DB.approvals.push({
-          id:uid('ap'), kind:'staff_reset_password', targetId:u.id, targetLabel:u.name, changes:{password:newPass},
+          id:uid('ap'), kind:'staff_reset_password', targetId:u.id, targetLabel:u.name, changes:{},
           requestedBy:session.name, requestedByRole:session.role, requestedDate:todayISO(), status:'pending'
         });
         await saveDB();
         alert('Password reset request submitted for Principal approval.');
-      } else {
-        u.password = newPass;
-        await saveDB();
-        alert(`Password for ${u.name} has been reset.`);
+        return;
+      }
+      try{
+        await auth.sendPasswordResetEmail(u.email);
+        alert(`A password reset email has been sent to ${u.email}.`);
+      }catch(e){
+        alert('Could not send reset email: ' + e.message);
       }
     };
   });
@@ -988,20 +1123,29 @@ function attachStaffHandlers(){
   });
   const cancel = document.getElementById('sfCancel');
   if(cancel) cancel.onclick = ()=>{ staffFormOpen=false; staffEditId=null; render(); };
+  const sendResetInEdit = document.getElementById('sfSendReset');
+  if(sendResetInEdit) sendResetInEdit.onclick = async ()=>{
+    const u = DB.users.find(x=>x.id===staffEditId);
+    const email = document.getElementById('sfEmail').value.trim() || (u && u.email);
+    if(!email){ alert('Please enter an email address first.'); return; }
+    try{
+      await auth.sendPasswordResetEmail(email);
+      alert(`A password reset email has been sent to ${email}.`);
+    }catch(e){ alert('Could not send reset email: ' + e.message); }
+  };
   const save = document.getElementById('sfSave');
   if(save) save.onclick = async ()=>{
     const name=document.getElementById('sfName').value.trim();
     const username=document.getElementById('sfUser').value.trim();
-    const password=document.getElementById('sfPass').value;
+    const email=document.getElementById('sfEmail').value.trim();
     if(!name||!username){ alert('Please fill in name and username.'); return; }
 
     if(staffEditId){
       const u = DB.users.find(x=>x.id===staffEditId);
       if(!u){ staffFormOpen=false; render(); return; }
-      if(DB.users.some(x=>x.id!==u.id && x.username===username)){ alert('That username is already taken.'); return; }
 
       if(session.role==='accounts'){
-        const changes = {name, username};
+        const changes = {name, email};
         if(u.role==='teacher'){
           changes.designation = document.getElementById('sfDesignation').value;
           changes.assignments = sfAssignments.map(a=>({...a}));
@@ -1017,30 +1161,51 @@ function attachStaffHandlers(){
       }
 
       u.name = name;
-      u.username = username;
-      if(password){
-        if(password.length < 6){ alert('New password must be at least 6 characters.'); return; }
-        u.password = password;
-      }
+      u.email = email;
       if(u.role==='teacher'){
         u.designation = document.getElementById('sfDesignation').value;
         u.assignments = sfAssignments.map(a=>({...a}));
         u.officeAccess = document.getElementById('sfOfficeAccess').checked;
       }
+      try{
+        await firestoreDB.collection('profiles').doc(u.authUid).update({
+          name, ...(u.role==='teacher' ? {designation:u.designation, assignments:u.assignments, officeAccess:u.officeAccess} : {})
+        });
+      }catch(e){ console.warn('Could not update profile doc', e); }
       await saveDB();
       staffFormOpen=false; staffEditId=null; render();
       return;
     }
 
     const role=document.getElementById('sfRole').value;
-    if(!password){ alert('Please enter a password.'); return; }
+    const password=document.getElementById('sfPass').value;
+    if(!email){ alert('Please enter an email address.'); return; }
+    if(!password || password.length < 6){ alert('Please enter an initial password (min 6 characters).'); return; }
     if(DB.users.some(u=>u.username===username)){ alert('That username is already taken.'); return; }
-    const newUser = {id:uid('u'), username, password, role, name};
+
+    const uId = uid('u');
+    const newUser = {id:uId, username, email, role, name};
     if(role==='teacher'){
       newUser.designation = document.getElementById('sfDesignation').value;
       newUser.assignments = sfAssignments.map(a=>({...a}));
       newUser.officeAccess = document.getElementById('sfOfficeAccess').checked;
     }
+
+    const saveBtn = document.getElementById('sfSave');
+    saveBtn.disabled = true; saveBtn.textContent = 'Creating login…';
+    try{
+      const authUid = await createAuthAccount({
+        username, email, password,
+        profile: {role, name, username, linkedId:uId,
+          ...(role==='teacher' ? {designation:newUser.designation, assignments:newUser.assignments, officeAccess:newUser.officeAccess} : {})}
+      });
+      newUser.authUid = authUid;
+    }catch(e){
+      alert('Could not create this account: ' + e.message);
+      saveBtn.disabled = false; saveBtn.textContent = 'Save account';
+      return;
+    }
+
     DB.users.push(newUser);
     await saveDB();
     staffFormOpen=false; render();
@@ -1113,11 +1278,9 @@ function studentEditModal(s){
         <div class="field"><label>Section</label><select id="seSection">${SECTIONS.map(x=>`<option ${x===s.section?'selected':''}>${x}</option>`).join('')}</select></div>
       </div>
       <div class="field"><label>Address</label><input id="seAddress" value="${esc(s.address)}"></div>
-      <div class="row-inline">
-        <div class="field"><label>Student login username</label><input id="seUser" value="${esc(s.username||'')}"></div>
-        <div class="field"><label>Student login password</label><input id="sePass" value="${esc(s.password||'')}"></div>
-      </div>
-      <div class="note">Change these to reset the student's login. Leave as-is to keep their current credentials.</div>
+      <div class="field"><label>Student login username</label><input value="${esc(s.username||'')}" disabled></div>
+      ${session.role==='principal' ? `<button type="button" class="btn btn-outline" id="seResetLogin" style="margin-bottom:10px;">Reset this student's login (creates a new password)</button>` : ''}
+      <div class="note">Username can't be changed here. Use the button above to reset their password if they've forgotten it.</div>
       ${session.role!=='principal' ? `<div class="note" style="color:var(--saffron-dark);font-weight:600;">These changes will be sent to the Principal for approval before they take effect.</div>` : ''}
       <div style="display:flex;gap:10px;margin-top:10px;">
         <button class="btn btn-primary" id="seSave">Save changes</button>
@@ -1152,6 +1315,32 @@ function attachStudentsHandlers(){
   });
   const cancel = document.getElementById('seCancel');
   if(cancel) cancel.onclick = ()=>{ studentEditId=null; render(); };
+  const resetLoginBtn = document.getElementById('seResetLogin');
+  if(resetLoginBtn) resetLoginBtn.onclick = async ()=>{
+    const s = DB.students.find(x=>x.id===studentEditId);
+    if(!s) return;
+    const newPassword = prompt(`Enter a new password for ${s.name} (min 6 characters). They will use this with their existing username (${s.username}):`);
+    if(newPassword===null) return;
+    if(newPassword.length < 6){ alert('Password must be at least 6 characters.'); return; }
+    resetLoginBtn.disabled = true; resetLoginBtn.textContent = 'Resetting…';
+    try{
+      const suffix = Date.now().toString(36);
+      const newEmail = `${s.username}.${suffix}@${STUDENT_EMAIL_DOMAIN}`;
+      const newAuthUid = await createAuthAccount({
+        username: s.username, email: newEmail, password: newPassword, allowExistingUsername: true,
+        profile: {role:'student', name:s.name, username:s.username, linkedId:s.id, className:s.className, section:s.section, admissionNo:s.admissionNo}
+      });
+      s.authUid = newAuthUid;
+      await saveDB();
+      // The old login (if any) is now orphaned and unusable, since the username
+      // index above was just repointed to this new account.
+      alert(`Login reset. ${s.name} can now log in with username "${s.username}" and the new password you entered.`);
+      resetLoginBtn.disabled = false; resetLoginBtn.textContent = "Reset this student's login (creates a new password)";
+    }catch(e){
+      alert('Could not reset login: ' + e.message);
+      resetLoginBtn.disabled = false; resetLoginBtn.textContent = "Reset this student's login (creates a new password)";
+    }
+  };
   const save = document.getElementById('seSave');
   if(save) save.onclick = async ()=>{
     const s = DB.students.find(x=>x.id===studentEditId);
@@ -1168,20 +1357,18 @@ function attachStudentsHandlers(){
     const className = document.getElementById('seClass').value;
     const section = document.getElementById('seSection').value;
     const address = document.getElementById('seAddress').value.trim();
-    const username = document.getElementById('seUser').value.trim() || s.username;
-    const password = document.getElementById('sePass').value || s.password;
 
     if(admissionNo !== s.admissionNo && DB.students.some(x=>x.id!==s.id && x.admissionNo===admissionNo)){
       alert('That admission number is already used by another student.'); return;
     }
-    if(username !== s.username && DB.students.some(x=>x.id!==s.id && x.username===username)){
-      alert('That username is already taken by another student.'); return;
-    }
 
-    const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address, username, password};
+    const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address};
 
     if(session.role==='principal'){
       Object.assign(s, changes);
+      try{
+        await firestoreDB.collection('profiles').doc(s.authUid || '').update({name, className, section, admissionNo});
+      }catch(e){ /* profile may be keyed differently pre-migration; non-fatal */ }
       await saveDB();
       studentEditId=null; render();
     } else {
@@ -1200,7 +1387,7 @@ function attachStudentsHandlers(){
 let attState = {className:'', section:'', date: todayISO(), draft:{}};
 function attendanceView(){
   if(session.role==='student'){
-    const student = DB.students.find(s=>s.id===session.id) || session;
+    const student = DB.students.find(s=>s.id===session.linkedId) || session;
     const prefix = `${student.className}-${student.section}-`;
     const rows = Object.keys(DB.attendance)
       .filter(k=>k.startsWith(prefix) && DB.attendance[k][student.id])
@@ -1224,7 +1411,8 @@ function attendanceView(){
       </table>`}
     </div>`;
   }
-  const teacherClasses = session.role==='teacher' ? teacherClassOptions(session) : [];
+  const staffRecord = session.role==='teacher' ? (DB.users.find(u=>u.id===session.linkedId) || session) : null;
+  const teacherClasses = session.role==='teacher' ? teacherClassOptions(staffRecord) : [];
   if(session.role==='teacher'){
     if(!attState.className || !teacherClasses.some(c=>c.className===attState.className && c.section===attState.section)){
       attState.className = teacherClasses[0] ? teacherClasses[0].className : CLASSES[0];
@@ -1312,7 +1500,7 @@ function attachAttendanceHandlers(){
 let marksState = {className:'', section:'', exam:EXAMS[0], subject:SUBJECTS[0], draft:{}};
 function marksView(){
   if(session.role==='student'){
-    const student = DB.students.find(s=>s.id===session.id) || session;
+    const student = DB.students.find(s=>s.id===session.linkedId) || session;
     const prefix = `${student.className}-${student.section}-`;
     const rows = [];
     Object.keys(DB.marks).forEach(k=>{
@@ -1340,13 +1528,14 @@ function marksView(){
       </table>`}
     </div>`;
   }
-  const teacherClasses = session.role==='teacher' ? teacherClassOptions(session) : [];
+  const staffRecord = session.role==='teacher' ? (DB.users.find(u=>u.id===session.linkedId) || session) : null;
+  const teacherClasses = session.role==='teacher' ? teacherClassOptions(staffRecord) : [];
   if(session.role==='teacher'){
     if(!marksState.className || !teacherClasses.some(c=>c.className===marksState.className && c.section===marksState.section)){
       marksState.className = teacherClasses[0] ? teacherClasses[0].className : CLASSES[0];
       marksState.section = teacherClasses[0] ? teacherClasses[0].section : SECTIONS[0];
     }
-    const mySubjects = teacherSubjectsFor(session, marksState.className, marksState.section);
+    const mySubjects = teacherSubjectsFor(staffRecord, marksState.className, marksState.section);
     if(!marksState.subject || !mySubjects.includes(marksState.subject)) marksState.subject = mySubjects[0] || SUBJECTS[0];
   } else if(!marksState.className){
     marksState.className = CLASSES[0]; marksState.section = SECTIONS[0];
@@ -1355,7 +1544,7 @@ function marksView(){
   const key = `${marksState.className}-${marksState.section}-${marksState.exam}-${marksState.subject}`;
   const saved = DB.marks[key] || {};
   const roster = studentsOf(marksState.className, marksState.section);
-  const subjectOptions = isTeacher ? teacherSubjectsFor(session, marksState.className, marksState.section) : SUBJECTS;
+  const subjectOptions = isTeacher ? teacherSubjectsFor(staffRecord, marksState.className, marksState.section) : SUBJECTS;
 
   return `
   <div class="panel">
@@ -1535,10 +1724,26 @@ function attachAdmissionsHandlers(){
     let password = document.getElementById('afPass').value;
     if(!username) username = name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'') || uid('stu');
     if(DB.students.some(s=>s.username===username)) username = `${username}.${seq}`;
-    if(!password) password = 'student' + seq;
+    if(!password || password.length < 6) password = 'student' + seq + Math.random().toString(36).slice(2,5);
+
+    const saveBtn = document.getElementById('afSave');
+    saveBtn.disabled = true; saveBtn.textContent = 'Creating login…';
+    let authUid;
+    try{
+      const email = `${username}@${STUDENT_EMAIL_DOMAIN}`;
+      authUid = await createAuthAccount({
+        username, email, password,
+        profile: {role:'student', name, username, linkedId:sId, className, section, admissionNo}
+      });
+    }catch(e){
+      alert('Could not create this student\'s login: ' + e.message);
+      saveBtn.disabled = false; saveBtn.textContent = 'Admit student';
+      return;
+    }
+
     DB.students.push({
       id:sId, admissionNo, name, fatherName, motherName, dob, className, section,
-      address, contact, admissionDate, status:'active', username, password
+      address, contact, admissionDate, status:'active', username, authUid
     });
     DB.admissions.push({id:uid('a'), name, fatherName, className, section, date: admissionDate, status:'Admitted', studentId:sId});
     await saveDB();
@@ -1551,7 +1756,7 @@ function attachAdmissionsHandlers(){
 let certFormOpen = false;
 function certificatesView(){
   if(session.role==='student'){
-    const list = DB.certificates.filter(c=>c.studentId===session.id).reverse();
+    const list = DB.certificates.filter(c=>c.studentId===session.linkedId).reverse();
     return `
     <div class="panel">
       <h2>My certificates</h2>
@@ -1712,7 +1917,7 @@ function openCertOverlay(rec){
 let rcFormOpen = false;
 function reportCardsView(){
   if(session.role==='student'){
-    const list = DB.reportCards.filter(r=>r.studentId===session.id).slice().reverse();
+    const list = DB.reportCards.filter(r=>r.studentId===session.linkedId).slice().reverse();
     return `
     <div class="panel">
       <h2>My report cards</h2>
@@ -1732,7 +1937,8 @@ function reportCardsView(){
     </div>`;
   }
   const canUpload = session.role==='principal' || session.role==='office' || session.role==='teacher';
-  const visibleStudents = session.role==='teacher' ? teacherStudents(session) : DB.students.filter(s=>s.status!=='left');
+  const staffRecordRC = session.role==='teacher' ? (DB.users.find(u=>u.id===session.linkedId) || session) : null;
+  const visibleStudents = session.role==='teacher' ? teacherStudents(staffRecordRC) : DB.students.filter(s=>s.status!=='left');
   const list = DB.reportCards.slice().reverse().filter(r=>{
     if(session.role!=='teacher') return true;
     return visibleStudents.some(s=>s.id===r.studentId);
@@ -1809,7 +2015,7 @@ function attachReportCardsHandlers(){
 let asgFormOpen = false;
 function assignmentsView(){
   if(session.role==='student'){
-    const student = DB.students.find(s=>s.id===session.id) || session;
+    const student = DB.students.find(s=>s.id===session.linkedId) || session;
     const list = DB.assignments.filter(a=>a.className===student.className && a.section===student.section).slice().reverse();
     return `
     <div class="panel">
@@ -1824,7 +2030,8 @@ function assignmentsView(){
     </div>`;
   }
   const isTeacher = session.role==='teacher';
-  const classOpts = isTeacher ? teacherClassOptions(session) : CLASSES.flatMap(c=>SECTIONS.map(s=>({className:c, section:s})));
+  const staffRecordA = isTeacher ? (DB.users.find(u=>u.id===session.linkedId) || session) : null;
+  const classOpts = isTeacher ? teacherClassOptions(staffRecordA) : CLASSES.flatMap(c=>SECTIONS.map(s=>({className:c, section:s})));
   const list = DB.assignments.slice().reverse().filter(a=> !isTeacher || a.postedByUserId===session.id);
   return `
   <div class="panel">
@@ -2054,7 +2261,7 @@ function attachAccountsHandlers(){
 const APPROVAL_FIELD_LABELS = {
   name:"Name", contact:"Contact", fatherName:"Father's name", motherName:"Mother's name",
   dob:"Date of birth", admissionNo:"Admission No.", className:"Class", section:"Section",
-  address:"Address", username:"Username", password:"Password",
+  address:"Address", username:"Username", email:"Email",
   designation:"Designation", assignments:"Classes taught"
 };
 function approvalKindLabel(kind){
@@ -2111,7 +2318,7 @@ function approvalsView(){
     </table>
   </div>` : ''}`;
 }
-function applyApproval(a){
+async function applyApproval(a){
   if(a.kind==='student_edit'){
     const s = DB.students.find(x=>x.id===a.targetId);
     if(s) Object.assign(s, a.changes);
@@ -2126,10 +2333,20 @@ function applyApproval(a){
     }
   } else if(a.kind==='staff_edit'){
     const u = DB.users.find(x=>x.id===a.targetId);
-    if(u) Object.assign(u, a.changes);
+    if(u){
+      Object.assign(u, a.changes);
+      if(u.authUid){
+        try{ await firestoreDB.collection('profiles').doc(u.authUid).update(a.changes); }
+        catch(e){ console.warn('Could not update profile doc for staff edit', e); }
+      }
+    }
   } else if(a.kind==='staff_reset_password'){
     const u = DB.users.find(x=>x.id===a.targetId);
-    if(u) u.password = a.changes.password;
+    if(u && u.email){
+      await auth.sendPasswordResetEmail(u.email);
+    } else {
+      throw new Error('This staff member has no email on file, so a reset link cannot be sent.');
+    }
   }
 }
 function attachApprovalsHandlers(){
@@ -2138,7 +2355,12 @@ function attachApprovalsHandlers(){
       const a = DB.approvals.find(x=>x.id===b.dataset.approve);
       if(!a) return;
       if(!confirm('Approve this request? It will be applied immediately.')) return;
-      applyApproval(a);
+      try{
+        await applyApproval(a);
+      }catch(e){
+        alert('Could not apply this approval: ' + e.message);
+        return;
+      }
       a.status = 'approved';
       a.reviewedDate = todayISO();
       await saveDB(); render();
@@ -2240,17 +2462,26 @@ function attachBackupHandlers(){
 /* ======================= INIT ======================= */
 (async function init(){
   await loadDB();
-  restoreSession();
-  if(session){
-    // re-link the session to the freshest copy of the underlying record, in case it changed
-    const fresh = session.role==='student'
-      ? DB.students.find(s=>s.id===session.id)
-      : DB.users.find(u=>u.id===session.id);
-    if(fresh){ session = {...fresh, role: session.role}; }
-    else { session = null; } // account was removed since last login
-    saveSession();
-  }
-  render();
+  auth.onAuthStateChanged(async (user)=>{
+    if(user){
+      const profile = await loadProfileForUser(user);
+      if(!profile){
+        // A real login exists but no profile record — something is inconsistent
+        // (e.g. account created outside the app). Sign them back out safely.
+        await auth.signOut();
+        session = null;
+        flashError = "Your account isn't fully set up yet. Please contact the Principal.";
+        render();
+        return;
+      }
+      session = {...profile, id: user.uid};
+      flashError = "";
+      route = "dashboard";
+    } else {
+      session = null;
+    }
+    render();
+  });
 })();
 
 if('serviceWorker' in navigator){
