@@ -1003,12 +1003,15 @@ function staffFormModal(){
       <div class="field"><label>Full name</label><input id="sfName" value="${editing ? esc(editing.name) : ''}" placeholder="e.g. Mrs. Farida Begum"></div>
       <div class="row-inline">
         <div class="field"><label>Username</label><input id="sfUser" value="${editing ? esc(editing.username) : ''}" ${editing ? 'disabled' : ''}></div>
-        <div class="field"><label>Email address</label><input id="sfEmail" type="email" value="${editing ? esc(editing.email||'') : ''}" placeholder="name@example.com"></div>
+        <div class="field"><label>Email address</label><input id="sfEmail" type="email" value="${editing ? esc(editing.email||'') : ''}" placeholder="name@example.com" ${editing ? 'disabled' : ''}></div>
       </div>
       ${!editing ? `<div class="field"><label>Initial password (min. 6 characters)</label><input id="sfPass" type="password"></div>
       <div class="note">The staff member can change this themselves later, or use "Forgot password" on the login screen (needs their email above).</div>` : `
       <div class="note">Password can no longer be reset here directly — use "Send password reset email" below, which emails them a secure reset link.</div>
-      <button type="button" class="btn btn-outline" id="sfSendReset" style="margin-bottom:14px;">Send password reset email</button>
+      <button type="button" class="btn btn-outline" id="sfSendReset" style="margin-bottom:10px;">Send password reset email</button>
+      <div class="field"><label>Change email address</label><input id="sfNewEmail" type="email" placeholder="new-email@example.com"></div>
+      <button type="button" class="btn btn-outline" id="sfUpdateEmail" style="margin-bottom:14px;">Update email &amp; send reset link</button>
+      <div class="note">Changing the email creates a fresh secure login under the new address — their username stays the same.</div>
       `}
       ${editing ? `
         <div class="note" style="margin-bottom:10px;">Role: <b style="text-transform:capitalize;">${role}</b> (can't be changed here — remove and re-add the account to change role)</div>
@@ -1133,6 +1136,33 @@ function attachStaffHandlers(){
       alert(`A password reset email has been sent to ${email}.`);
     }catch(e){ alert('Could not send reset email: ' + e.message); }
   };
+  const updateEmailBtn = document.getElementById('sfUpdateEmail');
+  if(updateEmailBtn) updateEmailBtn.onclick = async ()=>{
+    const u = DB.users.find(x=>x.id===staffEditId);
+    if(!u) return;
+    const newEmail = document.getElementById('sfNewEmail').value.trim();
+    if(!newEmail){ alert('Please type the new email address first.'); return; }
+    if(!confirm(`This creates a fresh secure login for ${u.name} under ${newEmail}. Their username (${u.username}) stays the same, but any old login under their previous email will stop working. Continue?`)) return;
+
+    updateEmailBtn.disabled = true; updateEmailBtn.textContent = 'Updating…';
+    try{
+      const tempPassword = 'Temp' + Math.random().toString(36).slice(2,8) + '1!';
+      const newAuthUid = await createAuthAccount({
+        username: u.username, email: newEmail, password: tempPassword, allowExistingUsername: true,
+        profile: {role:u.role, name:u.name, username:u.username, linkedId:u.id,
+          ...(u.role==='teacher' ? {designation:u.designation, assignments:u.assignments||[], officeAccess:!!u.officeAccess} : {})}
+      });
+      u.email = newEmail;
+      u.authUid = newAuthUid;
+      await saveDB();
+      await auth.sendPasswordResetEmail(newEmail);
+      alert(`Done. ${u.name}'s login now uses ${newEmail}. A password reset email has been sent so they can set their own password.`);
+      staffFormOpen=false; staffEditId=null; render();
+    }catch(e){
+      alert('Could not update email: ' + e.message);
+      updateEmailBtn.disabled = false; updateEmailBtn.textContent = 'Update email & send reset link';
+    }
+  };
   const save = document.getElementById('sfSave');
   if(save) save.onclick = async ()=>{
     const name=document.getElementById('sfName').value.trim();
@@ -1161,7 +1191,6 @@ function attachStaffHandlers(){
       }
 
       u.name = name;
-      u.email = email;
       if(u.role==='teacher'){
         u.designation = document.getElementById('sfDesignation').value;
         u.assignments = sfAssignments.map(a=>({...a}));
