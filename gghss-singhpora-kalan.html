@@ -446,14 +446,19 @@ async function createAuthAccount({username, email, password, profile, allowExist
 }
 
 /* ======================= HELPERS ======================= */
-function studentsOf(cls, sec){
-  return DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
+const SENIOR_SECONDARY_CLASSES = ["11","12"];
+function studentsOf(cls, sec, subject){
+  let list = DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
+  if(subject && SENIOR_SECONDARY_CLASSES.includes(cls)){
+    list = list.filter(s => (Array.isArray(s.subjects) && s.subjects.includes(subject)) || s.additionalSubject===subject);
+  }
+  return list;
 }
 function teacherStudents(u){
   const seen = new Set();
   const out = [];
   (u.assignments||[]).forEach(a=>{
-    studentsOf(a.className, a.section).forEach(s=>{
+    studentsOf(a.className, a.section, a.subject).forEach(s=>{
       if(!seen.has(s.id)){ seen.add(s.id); out.push(s); }
     });
   });
@@ -470,6 +475,44 @@ function teacherClassOptions(u){
 }
 function teacherSubjectsFor(u, className, section){
   return (u.assignments||[]).filter(a=>a.className===className && a.section===section).map(a=>a.subject);
+}
+const PASS_MARK = 33;
+function requiredSubjectsFor(student){
+  if(SENIOR_SECONDARY_CLASSES.includes(student.className)){
+    return [...(student.subjects||[]), student.additionalSubject].filter(Boolean);
+  }
+  // Classes 9-10 don't have a subject-choice list, so use whatever Annual
+  // Examination subjects have actually been recorded for this class-section.
+  const prefix = `${student.className}-${student.section}-Annual Examination-`;
+  const subjects = new Set();
+  Object.keys(DB.marks).forEach(k=>{
+    if(k.startsWith(prefix)){
+      const subj = k.slice(prefix.length);
+      if(DB.marks[k] && (student.id in DB.marks[k])) subjects.add(subj);
+    }
+  });
+  return [...subjects];
+}
+function checkAndPromoteStudent(studentId){
+  const s = DB.students.find(x=>x.id===studentId);
+  if(!s || s.status!=='active') return null;
+  const subjects = requiredSubjectsFor(s);
+  if(subjects.length===0) return null; // not enough Annual Examination marks recorded yet
+  for(const subj of subjects){
+    const k = `${s.className}-${s.section}-Annual Examination-${subj}`;
+    const mark = DB.marks[k] ? DB.marks[k][s.id] : undefined;
+    const num = parseFloat(mark);
+    if(mark===undefined || mark==='' || isNaN(num) || num < PASS_MARK) return null;
+  }
+  const classNum = parseInt(s.className, 10);
+  if(classNum < 12){
+    const fromClass = s.className;
+    s.className = String(classNum+1);
+    return {name:s.name, action:'promoted', from:fromClass, to:s.className};
+  } else {
+    s.status = 'graduated';
+    return {name:s.name, action:'graduated'};
+  }
 }
 function hasOfficeAccess(s){
   return s.role==='principal' || s.role==='office' || (s.role==='teacher' && !!s.officeAccess);
@@ -1244,6 +1287,10 @@ function attachStaffHandlers(){
 /* ======================= STUDENTS ======================= */
 let studentFilter = {className:'', q:''};
 let studentEditId = null;
+let editState = {className:''};
+let editSelectedSubjects = [];
+let editHasAdditional = false;
+let editAdditionalSubject = '';
 function studentsView(){
   const canEdit = hasOfficeAccess(session);
   let list = DB.students.filter(s=>s.status!=='left');
@@ -1284,6 +1331,8 @@ function studentsView(){
 }
 function studentEditModal(s){
   const fullEdit = true;
+  const editClassName = editState.className || s.className;
+  const isSenior = SENIOR_SECONDARY_CLASSES.includes(editClassName);
   return `
   <div class="modal-bg" id="stuModalBg">
     <div class="modal">
@@ -1303,9 +1352,30 @@ function studentEditModal(s){
       </div>
       ` : ''}
       <div class="row-inline">
-        <div class="field"><label>Class</label><select id="seClass">${CLASSES.map(c=>`<option value="${c}" ${c===s.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Class</label><select id="seClass">${CLASSES.map(c=>`<option value="${c}" ${c===editClassName?'selected':''}>Class ${c}</option>`).join('')}</select></div>
         <div class="field"><label>Section</label><select id="seSection">${SECTIONS.map(x=>`<option ${x===s.section?'selected':''}>${x}</option>`).join('')}</select></div>
       </div>
+      ${isSenior ? `
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
+        Subjects chosen (${editSelectedSubjects.length}/5 selected)
+      </label>
+      <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
+        ${SUBJECTS.map(sub=>`
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;">
+            <input type="checkbox" class="editSubjectCb" value="${esc(sub)}" ${editSelectedSubjects.includes(sub)?'checked':''} ${(!editSelectedSubjects.includes(sub) && editSelectedSubjects.length>=5)?'disabled':''}>
+            ${esc(sub)}
+          </label>`).join('')}
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;margin-bottom:8px;">
+        <input type="checkbox" id="seHasAdditional" ${editHasAdditional?'checked':''} style="width:16px;height:16px;">
+        This student is also taking a 6th (additional) subject
+      </label>
+      <div class="field" style="margin-bottom:16px;">
+        <label>Additional subject</label>
+        <select id="seAdditionalSubject" ${editHasAdditional?'':'disabled'}>
+          ${SUBJECTS.filter(sub=>!editSelectedSubjects.includes(sub)).map(sub=>`<option value="${esc(sub)}" ${sub===editAdditionalSubject?'selected':''}>${esc(sub)}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="field"><label>Address</label><input id="seAddress" value="${esc(s.address)}"></div>
       <div class="field"><label>Student login username</label><input value="${esc(s.username||'')}" disabled></div>
       ${session.role==='principal' ? `<button type="button" class="btn btn-outline" id="seResetLogin" style="margin-bottom:10px;">Reset this student's login (creates a new password)</button>` : ''}
@@ -1323,7 +1393,15 @@ function attachStudentsHandlers(){
   if(cf) cf.onchange = ()=>{ studentFilter.className=cf.value; render(); };
   const sq = document.getElementById('stuSearch');
   if(sq) sq.oninput = ()=>{ studentFilter.q=sq.value; render(); };
-  document.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{ studentEditId=b.dataset.edit; render(); });
+  document.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{
+    studentEditId=b.dataset.edit;
+    const s = DB.students.find(x=>x.id===studentEditId);
+    editState = {className: s ? s.className : CLASSES[0]};
+    editSelectedSubjects = (s && Array.isArray(s.subjects)) ? [...s.subjects] : [];
+    editHasAdditional = !!(s && s.additionalSubject);
+    editAdditionalSubject = (s && s.additionalSubject) || '';
+    render();
+  });
   document.querySelectorAll('[data-remove]').forEach(b=> b.onclick=async ()=>{
     const st = DB.students.find(x=>x.id===b.dataset.remove);
     if(!st) return;
@@ -1342,6 +1420,23 @@ function attachStudentsHandlers(){
       render();
     }
   });
+  const seClassSel = document.getElementById('seClass');
+  if(seClassSel) seClassSel.onchange = ()=>{
+    editState.className = seClassSel.value;
+    if(!SENIOR_SECONDARY_CLASSES.includes(editState.className)) editSelectedSubjects=[];
+    render();
+  };
+  document.querySelectorAll('.editSubjectCb').forEach(cb=>{
+    cb.onchange = ()=>{
+      if(cb.checked){ if(editSelectedSubjects.length<5) editSelectedSubjects.push(cb.value); }
+      else { editSelectedSubjects = editSelectedSubjects.filter(s=>s!==cb.value); }
+      render();
+    };
+  });
+  const seHasAdditionalCb = document.getElementById('seHasAdditional');
+  if(seHasAdditionalCb) seHasAdditionalCb.onchange = ()=>{ editHasAdditional = seHasAdditionalCb.checked; render(); };
+  const seAdditionalSel = document.getElementById('seAdditionalSubject');
+  if(seAdditionalSel) seAdditionalSel.onchange = ()=>{ editAdditionalSubject = seAdditionalSel.value; };
   const cancel = document.getElementById('seCancel');
   if(cancel) cancel.onclick = ()=>{ studentEditId=null; render(); };
   const resetLoginBtn = document.getElementById('seResetLogin');
@@ -1390,8 +1485,16 @@ function attachStudentsHandlers(){
     if(admissionNo !== s.admissionNo && DB.students.some(x=>x.id!==s.id && x.admissionNo===admissionNo)){
       alert('That admission number is already used by another student.'); return;
     }
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length!==5){
+      alert('Please choose exactly 5 subjects for this student.'); return;
+    }
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && editHasAdditional && !editAdditionalSubject){
+      alert('Please choose the 6th (additional) subject, or untick the box if not needed.'); return;
+    }
+    const subjects = SENIOR_SECONDARY_CLASSES.includes(className) ? [...editSelectedSubjects] : undefined;
+    const additionalSubject = (SENIOR_SECONDARY_CLASSES.includes(className) && editHasAdditional) ? editAdditionalSubject : undefined;
 
-    const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address};
+    const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address, subjects, additionalSubject};
 
     if(session.role==='principal'){
       Object.assign(s, changes);
@@ -1413,7 +1516,7 @@ function attachStudentsHandlers(){
 }
 
 /* ======================= ATTENDANCE ======================= */
-let attState = {className:'', section:'', date: todayISO(), draft:{}};
+let attState = {className:'', section:'', subject:'', date: todayISO(), draft:{}};
 function attendanceView(){
   if(session.role==='student'){
     const student = DB.students.find(s=>s.id===session.linkedId) || session;
@@ -1450,10 +1553,17 @@ function attendanceView(){
   } else if(!attState.className){
     attState.className = CLASSES[0]; attState.section = SECTIONS[0];
   }
+  const isTeacher = session.role==='teacher';
+  const isSenior = SENIOR_SECONDARY_CLASSES.includes(attState.className);
+  const subjectOptionsAtt = (isTeacher && isSenior) ? teacherSubjectsFor(staffRecord, attState.className, attState.section) : [];
+  if(isTeacher && isSenior){
+    if(!attState.subject || !subjectOptionsAtt.includes(attState.subject)) attState.subject = subjectOptionsAtt[0] || '';
+  } else {
+    attState.subject = '';
+  }
   const key = `${attState.className}-${attState.section}-${attState.date}`;
   const saved = DB.attendance[key] || {};
-  const roster = studentsOf(attState.className, attState.section);
-  const isTeacher = session.role==='teacher';
+  const roster = studentsOf(attState.className, attState.section, attState.subject);
 
   return `
   <div class="panel">
@@ -1465,6 +1575,9 @@ function attendanceView(){
       <div class="field"><label>Class</label><select id="attClass">${CLASSES.map(c=>`<option value="${c}" ${c===attState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
       <div class="field"><label>Section</label><select id="attSection">${SECTIONS.map(x=>`<option ${x===attState.section?'selected':''}>${x}</option>`).join('')}</select></div>
       `}
+      ${(isTeacher && isSenior) ? `<div class="field"><label>Subject</label>
+        <select id="attSubject">${subjectOptionsAtt.map(s=>`<option value="${s}" ${s===attState.subject?'selected':''}>${s}</option>`).join('')}</select>
+      </div>` : ''}
       <div class="field"><label>Date</label><input type="date" id="attDate" value="${attState.date}" max="${todayISO()}"></div>
     </div>
     ${roster.length===0 ? `<div class="empty"><b>No students in this class-section</b>Add students via Admissions first.</div>` : `
@@ -1501,7 +1614,9 @@ function attachAttendanceHandlers(){
   const sSel = document.getElementById('attSection');
   if(sSel) sSel.onchange = ()=>{ attState.section=sSel.value; render(); };
   const csSel = document.getElementById('attClassSec');
-  if(csSel) csSel.onchange = ()=>{ const [c,s]=csSel.value.split('|'); attState.className=c; attState.section=s; render(); };
+  if(csSel) csSel.onchange = ()=>{ const [c,s]=csSel.value.split('|'); attState.className=c; attState.section=s; attState.subject=''; render(); };
+  const attSubjectSel = document.getElementById('attSubject');
+  if(attSubjectSel) attSubjectSel.onchange = ()=>{ attState.subject=attSubjectSel.value; render(); };
   const dSel = document.getElementById('attDate');
   if(dSel) dSel.onchange = ()=>{ attState.date=dSel.value; render(); };
   const key = `${attState.className}-${attState.section}-${attState.date}`;
@@ -1572,7 +1687,7 @@ function marksView(){
   const isTeacher = session.role==='teacher';
   const key = `${marksState.className}-${marksState.section}-${marksState.exam}-${marksState.subject}`;
   const saved = DB.marks[key] || {};
-  const roster = studentsOf(marksState.className, marksState.section);
+  const roster = studentsOf(marksState.className, marksState.section, marksState.subject);
   const subjectOptions = isTeacher ? teacherSubjectsFor(staffRecord, marksState.className, marksState.section) : SUBJECTS;
 
   return `
@@ -1627,22 +1742,42 @@ function attachMarksHandlers(){
   document.querySelectorAll('.markInput').forEach(inp=>{
     inp.oninput = ()=>{ marksState.draft[key][inp.dataset.sid] = inp.value; };
   });
+
   const save = document.getElementById('mSave');
   if(save) save.onclick = async ()=>{
-    const roster = studentsOf(marksState.className, marksState.section);
+    const roster = studentsOf(marksState.className, marksState.section, marksState.subject);
     const record = {};
     roster.forEach(s=>{
       const inp = document.querySelector(`.markInput[data-sid="${s.id}"]`);
       record[s.id] = inp ? inp.value : '';
     });
     DB.marks[key] = record;
+
+    let promotionNote = '';
+    if(marksState.exam === 'Annual Examination'){
+      const results = roster.map(s=>checkAndPromoteStudent(s.id)).filter(Boolean);
+      if(results.length){
+        const promoted = results.filter(r=>r.action==='promoted');
+        const graduated = results.filter(r=>r.action==='graduated');
+        const parts = [];
+        if(promoted.length) parts.push(`${promoted.length} student(s) promoted to the next class (${promoted.map(r=>r.name).join(', ')}).`);
+        if(graduated.length) parts.push(`${graduated.length} student(s) marked as graduated (${graduated.map(r=>r.name).join(', ')}).`);
+        promotionNote = ' ' + parts.join(' ');
+      }
+    }
+
     await saveDB();
-    document.getElementById('mSavedNote').textContent = 'Marks saved for ' + marksState.exam + '.';
+    document.getElementById('mSavedNote').textContent = 'Marks saved for ' + marksState.exam + '.' + promotionNote;
+    if(promotionNote) alert('Marks saved.' + promotionNote);
   };
 }
 
 /* ======================= ADMISSIONS ======================= */
 let admFormOpen = false;
+let admState = {className:CLASSES[0], section:SECTIONS[0]};
+let admSelectedSubjects = [];
+let admHasAdditional = false;
+let admAdditionalSubject = '';
 function admissionsView(){
   const canAdd = hasOfficeAccess(session);
   const list = [...DB.admissions].reverse();
@@ -1672,6 +1807,7 @@ function admFormModal(){
   const year = new Date().getFullYear();
   const seq = (DB.students.length+1).toString().padStart(4,'0');
   const suggestedAdmNo = `GGHSS-${year}-${seq}`;
+  const isSenior = SENIOR_SECONDARY_CLASSES.includes(admState.className || CLASSES[0]);
   return `
   <div class="modal-bg" id="admModalBg">
     <div class="modal">
@@ -1690,9 +1826,30 @@ function admFormModal(){
         <div class="field"><label>Contact number</label><input id="afContact"></div>
       </div>
       <div class="row-inline">
-        <div class="field"><label>Admitted to class</label><select id="afClass">${CLASSES.map(c=>`<option value="${c}">Class ${c}</option>`).join('')}</select></div>
-        <div class="field"><label>Section</label><select id="afSection">${SECTIONS.map(s=>`<option>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Admitted to class</label><select id="afClass">${CLASSES.map(c=>`<option value="${c}" ${c===admState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Section</label><select id="afSection">${SECTIONS.map(s=>`<option ${s===admState.section?'selected':''}>${s}</option>`).join('')}</select></div>
       </div>
+      ${isSenior ? `
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
+        Choose exactly 5 subjects (${admSelectedSubjects.length}/5 selected)
+      </label>
+      <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
+        ${SUBJECTS.map(s=>`
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;">
+            <input type="checkbox" class="admSubjectCb" value="${esc(s)}" ${admSelectedSubjects.includes(s)?'checked':''} ${(!admSelectedSubjects.includes(s) && admSelectedSubjects.length>=5)?'disabled':''}>
+            ${esc(s)}
+          </label>`).join('')}
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;margin-bottom:8px;">
+        <input type="checkbox" id="afHasAdditional" ${admHasAdditional?'checked':''} style="width:16px;height:16px;">
+        This student is also taking a 6th (additional) subject
+      </label>
+      <div class="field" style="margin-bottom:16px;">
+        <label>Additional subject</label>
+        <select id="afAdditionalSubject" ${admHasAdditional?'':'disabled'}>
+          ${SUBJECTS.filter(s=>!admSelectedSubjects.includes(s)).map(s=>`<option value="${esc(s)}" ${s===admAdditionalSubject?'selected':''}>${esc(s)}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="field"><label>Address</label><input id="afAddress" placeholder="Singhpora Kalan"></div>
       <div class="row-inline">
         <div class="field"><label>Student login username</label><input id="afUser" placeholder="auto-generated if blank"></div>
@@ -1708,7 +1865,22 @@ function admFormModal(){
 }
 function attachAdmissionsHandlers(){
   const addBtn = document.getElementById('addAdmBtn');
-  if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; render(); };
+  if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; admState={className:CLASSES[0], section:SECTIONS[0]}; admSelectedSubjects=[]; admHasAdditional=false; admAdditionalSubject=''; render(); };
+  const afClassSel = document.getElementById('afClass');
+  if(afClassSel) afClassSel.onchange = ()=>{ admState.className=afClassSel.value; if(!SENIOR_SECONDARY_CLASSES.includes(admState.className)){ admSelectedSubjects=[]; admHasAdditional=false; admAdditionalSubject=''; } render(); };
+  const afSectionSel = document.getElementById('afSection');
+  if(afSectionSel) afSectionSel.onchange = ()=>{ admState.section=afSectionSel.value; };
+  document.querySelectorAll('.admSubjectCb').forEach(cb=>{
+    cb.onchange = ()=>{
+      if(cb.checked){ if(admSelectedSubjects.length<5) admSelectedSubjects.push(cb.value); }
+      else { admSelectedSubjects = admSelectedSubjects.filter(s=>s!==cb.value); }
+      render();
+    };
+  });
+  const hasAdditionalCb = document.getElementById('afHasAdditional');
+  if(hasAdditionalCb) hasAdditionalCb.onchange = ()=>{ admHasAdditional = hasAdditionalCb.checked; render(); };
+  const additionalSel = document.getElementById('afAdditionalSubject');
+  if(additionalSel) additionalSel.onchange = ()=>{ admAdditionalSubject = additionalSel.value; };
   document.querySelectorAll('[data-adm-del]').forEach(b=>{
     b.onclick = async ()=>{
       const adm = DB.admissions.find(a=>a.id===b.dataset.admDel);
@@ -1747,6 +1919,14 @@ function attachAdmissionsHandlers(){
     if(!name || !fatherName){ alert('Please enter at least the student and father\'s name.'); return; }
     if(!admissionNo){ alert('Please enter an admission number.'); return; }
     if(DB.students.some(s=>s.admissionNo===admissionNo)){ alert('That admission number is already in use.'); return; }
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length!==5){
+      alert('Please choose exactly 5 subjects for this student.'); return;
+    }
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && admHasAdditional && !admAdditionalSubject){
+      alert('Please choose the 6th (additional) subject, or untick the box if not needed.'); return;
+    }
+    const subjects = SENIOR_SECONDARY_CLASSES.includes(className) ? [...admSelectedSubjects] : undefined;
+    const additionalSubject = (SENIOR_SECONDARY_CLASSES.includes(className) && admHasAdditional) ? admAdditionalSubject : undefined;
     const seq = (DB.students.length+1).toString().padStart(4,'0');
     const sId = uid('s');
     let username = document.getElementById('afUser').value.trim();
@@ -1772,7 +1952,7 @@ function attachAdmissionsHandlers(){
 
     DB.students.push({
       id:sId, admissionNo, name, fatherName, motherName, dob, className, section,
-      address, contact, admissionDate, status:'active', username, authUid
+      address, contact, admissionDate, status:'active', username, authUid, subjects, additionalSubject
     });
     DB.admissions.push({id:uid('a'), name, fatherName, className, section, date: admissionDate, status:'Admitted', studentId:sId});
     await saveDB();
@@ -2415,10 +2595,10 @@ function backupView(){
   <div class="panel">
     <h2>Download a backup</h2>
     <p style="font-size:13.5px;line-height:1.8;color:var(--ink-soft);">
-      This app stores all its data only in this browser on this device — there is no separate server copy.
-      If the browser's data is ever cleared, or you switch devices, everything (students, staff, marks, certificates)
-      can be lost unless you have a backup file. <b>Download a backup regularly</b> — after admitting new students,
-      adding staff, or entering marks — and save the file somewhere safe (email it to yourself, or save it to Google Drive).
+      This app's data lives in a shared online database, so it's safe from any single device being lost or reset.
+      Still, <b>download a backup regularly</b> — after admitting new students, adding staff, or entering marks —
+      and save the file somewhere safe (email it to yourself, or save it to Google Drive), as a safeguard against
+      accidental deletions or database issues.
     </p>
     <p style="font-size:13.5px;margin-bottom:14px;"><b>Current data:</b> ${studentCount} active students, ${staffCount} staff accounts.</p>
     <button class="btn btn-primary" id="downloadBackupBtn">Download backup file</button>
@@ -2426,12 +2606,24 @@ function backupView(){
   <div class="panel">
     <h2>Restore from a backup</h2>
     <p style="font-size:13.5px;line-height:1.8;color:var(--ink-soft);">
-      Use this if this device's data was lost or reset, and you have a backup file downloaded earlier.
+      Use this if data was lost or you need to roll back to an earlier backup file.
       <b style="color:var(--saffron-dark);">Warning: this replaces everything currently in the app with the contents of the backup file.</b>
     </p>
     <input type="file" id="restoreFile" accept=".json" style="margin-bottom:12px;display:block;">
     <button class="btn btn-outline" id="restoreBackupBtn">Restore from this file</button>
-  </div>`;
+  </div>
+  ${session.role==='principal' ? `
+  <div class="panel" style="border-color:var(--red);">
+    <h2 style="color:var(--red);">Danger zone</h2>
+    <p style="font-size:13.5px;line-height:1.8;color:var(--ink-soft);">
+      Permanently deletes <b>every student record</b>, their admissions, attendance, marks, certificates, and report cards.
+      Staff accounts and circulars are not affected. Use this only when you intend to re-enter students from scratch
+      (e.g. moving to the new subject-choice system for Class 11 and 12).
+      <b style="color:var(--red);">This cannot be undone — download a backup first.</b>
+    </p>
+    <div class="field"><label>Type DELETE ALL STUDENTS to confirm</label><input id="deleteAllConfirmText" placeholder="DELETE ALL STUDENTS"></div>
+    <button class="btn" style="background:var(--red);color:#fff;" id="deleteAllStudentsBtn">Delete all students permanently</button>
+  </div>` : ''}`;
 }
 function attachBackupHandlers(){
   const dlBtn = document.getElementById('downloadBackupBtn');
@@ -2485,6 +2677,32 @@ function attachBackupHandlers(){
       }
     };
     reader.readAsText(file);
+  };
+  const deleteAllBtn = document.getElementById('deleteAllStudentsBtn');
+  if(deleteAllBtn) deleteAllBtn.onclick = async ()=>{
+    const confirmText = document.getElementById('deleteAllConfirmText').value.trim();
+    if(confirmText !== 'DELETE ALL STUDENTS'){
+      alert('Please type "DELETE ALL STUDENTS" exactly (all capitals) to confirm.');
+      return;
+    }
+    if(!confirm('Absolutely sure? This permanently deletes every student, their admissions, attendance, marks, certificates and report cards. This cannot be undone.')) return;
+
+    deleteAllBtn.disabled = true; deleteAllBtn.textContent = 'Deleting…';
+    try{
+      const studentIds = new Set(DB.students.map(s=>s.id));
+      DB.students = [];
+      DB.admissions = [];
+      DB.attendance = {};
+      Object.keys(DB.marks).forEach(k=>{ delete DB.marks[k]; });
+      DB.certificates = [];
+      DB.reportCards = [];
+      await saveDB();
+      alert('All student data has been deleted. You can now start admitting students fresh.');
+      render();
+    }catch(e){
+      alert('Could not complete the deletion: ' + e.message);
+      deleteAllBtn.disabled = false; deleteAllBtn.textContent = 'Delete all students permanently';
+    }
   };
 }
 
