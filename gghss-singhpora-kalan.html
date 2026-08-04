@@ -451,10 +451,26 @@ async function createAuthAccount({username, email, password, profile, allowExist
 /* ======================= HELPERS ======================= */
 const SENIOR_SECONDARY_CLASSES = ["11","12"];
 const DEFAULT_SUBJECT = "English";
+// Some subjects are a single choice for the student but are actually taught (and marked)
+// by two separate teachers — e.g. a student who picks "Biology" is really taught by a
+// Botany teacher and a Zoology teacher. This map lets a teacher assigned one of the split
+// subjects still see and mark the students who picked the parent subject.
+const SUBJECT_SPLIT_GROUPS = {
+  "Biology": ["Botany","Zoology"]
+};
+function splitSubjectsFor(subject){
+  return SUBJECT_SPLIT_GROUPS[subject] || [subject];
+}
+function studentChoiceMatchesTaughtSubject(studentSubject, taughtSubject){
+  return studentSubject===taughtSubject || splitSubjectsFor(studentSubject).includes(taughtSubject);
+}
 function studentsOf(cls, sec, subject){
   let list = DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
   if(subject && SENIOR_SECONDARY_CLASSES.includes(cls)){
-    list = list.filter(s => (Array.isArray(s.subjects) && s.subjects.includes(subject)) || s.additionalSubject===subject);
+    list = list.filter(s => {
+      const chosen = [...(Array.isArray(s.subjects) ? s.subjects : []), s.additionalSubject].filter(Boolean);
+      return chosen.some(cs => studentChoiceMatchesTaughtSubject(cs, subject));
+    });
   }
   return list;
 }
@@ -483,7 +499,10 @@ function teacherSubjectsFor(u, className, section){
 const PASS_PERCENT = 33;
 function requiredSubjectsFor(student){
   if(SENIOR_SECONDARY_CLASSES.includes(student.className)){
-    return [...(student.subjects||[]), student.additionalSubject].filter(Boolean);
+    const chosen = [...(student.subjects||[]), student.additionalSubject].filter(Boolean);
+    // A split subject (e.g. Biology) is graded by two separate teachers under their own
+    // subject names, so both must have a passing mark recorded for the student to progress.
+    return [...new Set(chosen.flatMap(splitSubjectsFor))];
   }
   // Classes 9-10 don't have a subject-choice list, so use whatever Summative
   // Assessment subjects have actually been recorded for this class-section.
