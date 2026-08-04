@@ -292,7 +292,7 @@ const SUBJECTS = [
   "Physics","Chemistry","Biology","Botany","Zoology","Accountancy","Business Studies","Economics","Statistics",
   "History","Political Science","Geography","Psychology","Sociology","Home Science","Music","Education"
 ];
-const EXAMS = ["Unit Test 1","Unit Test 2","Half Yearly Examination","Unit Test 3","Annual Examination"];
+const EXAMS = ["Formative Assessment 1","Formative Assessment 2","Formative Assessment 3","Formative Assessment 4","Formative Assessment 5","Formative Assessment 6","Co-Curricular","Summative Assessment"];
 const DESIGNATIONS = [
   "Teacher","Master","Lecturer","Senior Lecturer",
   "Physical Education Teacher (PET)","Physical Education Master (PEM)",
@@ -335,6 +335,7 @@ function seedDB(){
     ],
     attendance:{},
     marks:{},
+    marksMax:{},
     certificates:[],
     reportCards:[],
     assignments:[],
@@ -384,6 +385,7 @@ async function loadDB(){
   if(!DB.circulars) DB.circulars = [];
   if(!DB.accountEntries) DB.accountEntries = [];
   if(!DB.approvals) DB.approvals = [];
+  if(!DB.marksMax) DB.marksMax = {};
 
   // Keep listening for changes made from other devices, and pull them in live.
   if(firestoreUnsub) firestoreUnsub();
@@ -395,6 +397,7 @@ async function loadDB(){
     if(!DB.circulars) DB.circulars = [];
     if(!DB.accountEntries) DB.accountEntries = [];
     if(!DB.approvals) DB.approvals = [];
+    if(!DB.marksMax) DB.marksMax = {};
     try{ localStorage.setItem('school_db', JSON.stringify(DB)); }catch(e){}
     if(session && !anyModalOpen()){ render(); }
   }, (err)=> console.warn('Live sync listener error:', err));
@@ -447,6 +450,7 @@ async function createAuthAccount({username, email, password, profile, allowExist
 
 /* ======================= HELPERS ======================= */
 const SENIOR_SECONDARY_CLASSES = ["11","12"];
+const DEFAULT_SUBJECT = "English";
 function studentsOf(cls, sec, subject){
   let list = DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
   if(subject && SENIOR_SECONDARY_CLASSES.includes(cls)){
@@ -476,14 +480,14 @@ function teacherClassOptions(u){
 function teacherSubjectsFor(u, className, section){
   return (u.assignments||[]).filter(a=>a.className===className && a.section===section).map(a=>a.subject);
 }
-const PASS_MARK = 33;
+const PASS_PERCENT = 33;
 function requiredSubjectsFor(student){
   if(SENIOR_SECONDARY_CLASSES.includes(student.className)){
     return [...(student.subjects||[]), student.additionalSubject].filter(Boolean);
   }
-  // Classes 9-10 don't have a subject-choice list, so use whatever Annual
-  // Examination subjects have actually been recorded for this class-section.
-  const prefix = `${student.className}-${student.section}-Annual Examination-`;
+  // Classes 9-10 don't have a subject-choice list, so use whatever Summative
+  // Assessment subjects have actually been recorded for this class-section.
+  const prefix = `${student.className}-${student.section}-Summative Assessment-`;
   const subjects = new Set();
   Object.keys(DB.marks).forEach(k=>{
     if(k.startsWith(prefix)){
@@ -497,12 +501,13 @@ function checkAndPromoteStudent(studentId){
   const s = DB.students.find(x=>x.id===studentId);
   if(!s || s.status!=='active') return null;
   const subjects = requiredSubjectsFor(s);
-  if(subjects.length===0) return null; // not enough Annual Examination marks recorded yet
+  if(subjects.length===0) return null; // not enough Summative Assessment marks recorded yet
   for(const subj of subjects){
-    const k = `${s.className}-${s.section}-Annual Examination-${subj}`;
+    const k = `${s.className}-${s.section}-Summative Assessment-${subj}`;
     const mark = DB.marks[k] ? DB.marks[k][s.id] : undefined;
+    const max = DB.marksMax[k] || 100;
     const num = parseFloat(mark);
-    if(mark===undefined || mark==='' || isNaN(num) || num < PASS_MARK) return null;
+    if(mark===undefined || mark==='' || isNaN(num) || (num/max*100) < PASS_PERCENT) return null;
   }
   const classNum = parseInt(s.className, 10);
   if(classNum < 12){
@@ -699,24 +704,27 @@ function navLinksFor(s){
   if(role==='principal'){
     const pending = DB.approvals.filter(a=>a.status==='pending').length;
     return [
-      ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],
-      ["attendance","Attendance"],["marks","Marks"],["admissions","Admissions"],["certificates","Certificates"],
+      ["dashboard","Dashboard"],["staff","Manage Staff"],["students","Students"],["classroll","Class Roll"],
+      ["attendance","Attendance"],["attendancereports","Attendance Reports"],["marks","Marks"],["markscard","Marks Card"],
+      ["admissions","Admissions"],["certificates","Certificates"],
       ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"],["accounts","Accounts"],
       ["approvals", pending>0 ? `Approvals (${pending})` : "Approvals"],["backup","Backup & Restore"]
     ];
   }
   if(role==='teacher'){
     const links = [
-      ["dashboard","Dashboard"],["attendance","Attendance"],["marks","Marks"],
+      ["dashboard","Dashboard"],["classroll","Class Roll"],
+      ["attendance","Attendance"],["attendancereports","Attendance Reports"],["marks","Marks"],
       ["reportcards","Report Cards"],["assignments","Assignments"],["circulars","Circulars"]
     ];
     if(s.officeAccess){
-      links.splice(3, 0, ["admissions","Admissions"], ["students","Student Directory"], ["certificates","Certificates"]);
+      links.splice(5, 0, ["admissions","Admissions"], ["students","Student Directory"], ["certificates","Certificates"], ["markscard","Marks Card"]);
     }
     return links;
   }
   if(role==='office') return [
-    ["dashboard","Dashboard"],["admissions","Admissions"],["students","Student Directory"],["certificates","Certificates"],
+    ["dashboard","Dashboard"],["admissions","Admissions"],["students","Student Directory"],["classroll","Class Roll"],
+    ["certificates","Certificates"],["markscard","Marks Card"],["attendancereports","Attendance Reports"],
     ["reportcards","Report Cards"],["circulars","Circulars"]
   ];
   if(role==='accounts') return [
@@ -772,7 +780,8 @@ function pageTitle(){
     attendance: isStudent?"My Attendance":"Attendance", marks: isStudent?"My Marks":"Marks",
     admissions:"Admissions", certificates: isStudent?"My Certificates":"Certificates",
     reportcards: isStudent?"My Report Cards":"Report Cards", assignments:"Assignments", circulars:"Circulars & Orders",
-    accounts:"Accounts", approvals:"Approvals", backup:"Backup & Restore"};
+    accounts:"Accounts", approvals:"Approvals", backup:"Backup & Restore",
+    classroll:"Class Roll", attendancereports:"Attendance Reports", markscard:"Marks Card"};
   return map[route] || "Dashboard";
 }
 let pwModalOpen = false;
@@ -878,6 +887,9 @@ function routeView(){
   if(route==='accounts') return accountsView();
   if(route==='approvals' && session.role==='principal') return approvalsView();
   if(route==='backup' && session.role==='principal') return backupView();
+  if(route==='classroll') return classRollView();
+  if(route==='attendancereports') return attendanceReportsView();
+  if(route==='markscard') return marksCardView();
   return dashboardView();
 }
 function attachRouteHandlers(){
@@ -894,6 +906,9 @@ function attachRouteHandlers(){
   if(route==='accounts') return attachAccountsHandlers();
   if(route==='approvals') return attachApprovalsHandlers();
   if(route==='backup') return attachBackupHandlers();
+  if(route==='classroll') return attachClassRollHandlers();
+  if(route==='attendancereports') return attachAttendanceReportsHandlers();
+  if(route==='markscard') return attachMarksCardHandlers();
 }
 
 /* ======================= DASHBOARD ======================= */
@@ -1289,8 +1304,6 @@ let studentFilter = {className:'', q:''};
 let studentEditId = null;
 let editState = {className:''};
 let editSelectedSubjects = [];
-let editHasAdditional = false;
-let editAdditionalSubject = '';
 function studentsView(){
   const canEdit = hasOfficeAccess(session);
   let list = DB.students.filter(s=>s.status!=='left');
@@ -1350,6 +1363,7 @@ function studentEditModal(s){
         <div class="field"><label>Date of birth</label><input type="date" id="seDob" value="${esc(s.dob||'')}"></div>
         <div class="field"><label>Admission No.</label><input id="seAdmNo" value="${esc(s.admissionNo||'')}"></div>
       </div>
+      <div class="field"><label>Gender</label><select id="seGender"><option value="Female" ${(s.gender||'Female')==='Female'?'selected':''}>Female</option><option value="Male" ${s.gender==='Male'?'selected':''}>Male</option></select></div>
       ` : ''}
       <div class="row-inline">
         <div class="field"><label>Class</label><select id="seClass">${CLASSES.map(c=>`<option value="${c}" ${c===editClassName?'selected':''}>Class ${c}</option>`).join('')}</select></div>
@@ -1357,24 +1371,17 @@ function studentEditModal(s){
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Subjects chosen (${editSelectedSubjects.length}/5 selected)
+        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+editSelectedSubjects.length}/6 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
-        ${SUBJECTS.map(sub=>`
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
+          <input type="checkbox" checked disabled> English (compulsory)
+        </label>
+        ${SUBJECTS.filter(sub=>sub!==DEFAULT_SUBJECT).map(sub=>`
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;">
             <input type="checkbox" class="editSubjectCb" value="${esc(sub)}" ${editSelectedSubjects.includes(sub)?'checked':''} ${(!editSelectedSubjects.includes(sub) && editSelectedSubjects.length>=5)?'disabled':''}>
             ${esc(sub)}
           </label>`).join('')}
-      </div>
-      <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;margin-bottom:8px;">
-        <input type="checkbox" id="seHasAdditional" ${editHasAdditional?'checked':''} style="width:16px;height:16px;">
-        This student is also taking a 6th (additional) subject
-      </label>
-      <div class="field" style="margin-bottom:16px;">
-        <label>Additional subject</label>
-        <select id="seAdditionalSubject" ${editHasAdditional?'':'disabled'}>
-          ${SUBJECTS.filter(sub=>!editSelectedSubjects.includes(sub)).map(sub=>`<option value="${esc(sub)}" ${sub===editAdditionalSubject?'selected':''}>${esc(sub)}</option>`).join('')}
-        </select>
       </div>` : ''}
       <div class="field"><label>Address</label><input id="seAddress" value="${esc(s.address)}"></div>
       <div class="field"><label>Student login username</label><input value="${esc(s.username||'')}" disabled></div>
@@ -1398,8 +1405,6 @@ function attachStudentsHandlers(){
     const s = DB.students.find(x=>x.id===studentEditId);
     editState = {className: s ? s.className : CLASSES[0]};
     editSelectedSubjects = (s && Array.isArray(s.subjects)) ? [...s.subjects] : [];
-    editHasAdditional = !!(s && s.additionalSubject);
-    editAdditionalSubject = (s && s.additionalSubject) || '';
     render();
   });
   document.querySelectorAll('[data-remove]').forEach(b=> b.onclick=async ()=>{
@@ -1433,10 +1438,6 @@ function attachStudentsHandlers(){
       render();
     };
   });
-  const seHasAdditionalCb = document.getElementById('seHasAdditional');
-  if(seHasAdditionalCb) seHasAdditionalCb.onchange = ()=>{ editHasAdditional = seHasAdditionalCb.checked; render(); };
-  const seAdditionalSel = document.getElementById('seAdditionalSubject');
-  if(seAdditionalSel) seAdditionalSel.onchange = ()=>{ editAdditionalSubject = seAdditionalSel.value; };
   const cancel = document.getElementById('seCancel');
   if(cancel) cancel.onclick = ()=>{ studentEditId=null; render(); };
   const resetLoginBtn = document.getElementById('seResetLogin');
@@ -1474,10 +1475,12 @@ function attachStudentsHandlers(){
     const moEl = document.getElementById('seMother');
     const dobEl = document.getElementById('seDob');
     const admEl = document.getElementById('seAdmNo');
+    const genderEl = document.getElementById('seGender');
     const fatherName = feEl ? feEl.value.trim() : s.fatherName;
     const motherName = moEl ? moEl.value.trim() : s.motherName;
     const dob = (dobEl && dobEl.value) ? dobEl.value : s.dob;
     const admissionNo = (admEl && admEl.value.trim()) ? admEl.value.trim() : s.admissionNo;
+    const gender = genderEl ? genderEl.value : s.gender;
     const className = document.getElementById('seClass').value;
     const section = document.getElementById('seSection').value;
     const address = document.getElementById('seAddress').value.trim();
@@ -1486,15 +1489,13 @@ function attachStudentsHandlers(){
       alert('That admission number is already used by another student.'); return;
     }
     if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length!==5){
-      alert('Please choose exactly 5 subjects for this student.'); return;
+      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
     }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && editHasAdditional && !editAdditionalSubject){
-      alert('Please choose the 6th (additional) subject, or untick the box if not needed.'); return;
-    }
-    const subjects = SENIOR_SECONDARY_CLASSES.includes(className) ? [...editSelectedSubjects] : undefined;
-    const additionalSubject = (SENIOR_SECONDARY_CLASSES.includes(className) && editHasAdditional) ? editAdditionalSubject : undefined;
+    const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
+      ? [DEFAULT_SUBJECT, ...editSelectedSubjects]
+      : [DEFAULT_SUBJECT];
 
-    const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address, subjects, additionalSubject};
+    const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address, subjects, gender};
 
     if(session.role==='principal'){
       Object.assign(s, changes);
@@ -1652,21 +1653,22 @@ function marksView(){
       const val = DB.marks[k][student.id];
       if(val===undefined || val==='') return;
       const [exam, subject] = k.slice(prefix.length).split('-');
-      rows.push({exam, subject, val});
+      const max = DB.marksMax[k];
+      rows.push({exam, subject, val, max});
     });
     return `
     <div class="panel">
       <h2>My marks</h2>
-      ${rows.length===0 ? `<div class="empty"><b>No marks recorded yet</b>Your subject teacher enters marks after each examination.</div>` : `
+      ${rows.length===0 ? `<div class="empty"><b>No marks recorded yet</b>Your subject teacher enters marks after each assessment.</div>` : `
       <table>
-        <thead><tr><th class="idx">#</th><th>Examination</th><th>Subject</th><th>Marks (/100)</th></tr></thead>
+        <thead><tr><th class="idx">#</th><th>Assessment</th><th>Subject</th><th>Marks</th></tr></thead>
         <tbody>
           ${rows.map((r,i)=>`
             <tr>
               <td class="idx">${i+1}</td>
               <td>${esc(r.exam)}</td>
               <td>${esc(r.subject)}</td>
-              <td>${esc(r.val)}</td>
+              <td>${esc(r.val)}${r.max ? ' / ' + esc(r.max) : ''}</td>
             </tr>`).join('')}
         </tbody>
       </table>`}
@@ -1689,10 +1691,11 @@ function marksView(){
   const saved = DB.marks[key] || {};
   const roster = studentsOf(marksState.className, marksState.section, marksState.subject);
   const subjectOptions = isTeacher ? teacherSubjectsFor(staffRecord, marksState.className, marksState.section) : SUBJECTS;
+  const maxMarks = DB.marksMax[key] || 20;
 
   return `
   <div class="panel">
-    <h2>Examination marks</h2>
+    <h2>Assessment marks</h2>
     <div class="row-inline">
       ${isTeacher ? `<div class="field"><label>Class</label>
         <select id="mClassSec">${teacherClasses.map(c=>`<option value="${c.className}|${c.section}" ${c.className===marksState.className && c.section===marksState.section?'selected':''}>Class ${c.className}-${c.section}</option>`).join('')}</select>
@@ -1700,12 +1703,15 @@ function marksView(){
       <div class="field"><label>Class</label><select id="mClass">${CLASSES.map(c=>`<option value="${c}" ${c===marksState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
       <div class="field"><label>Section</label><select id="mSection">${SECTIONS.map(x=>`<option ${x===marksState.section?'selected':''}>${x}</option>`).join('')}</select></div>
       `}
-      <div class="field"><label>Examination</label><select id="mExam">${EXAMS.map(x=>`<option ${x===marksState.exam?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Assessment type</label><select id="mExam">${EXAMS.map(x=>`<option ${x===marksState.exam?'selected':''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>Subject</label><select id="mSubject">${subjectOptions.map(x=>`<option ${x===marksState.subject?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div>
+    <div class="row-inline">
+      <div class="field"><label>Total marks for this test (applies to the whole class)</label><input type="number" min="1" id="mMaxMarks" value="${maxMarks}" style="max-width:140px;"></div>
     </div>
     ${roster.length===0 ? `<div class="empty"><b>No students in this class-section</b></div>` : `
     <table>
-      <thead><tr><th class="idx">#</th><th>Admission No.</th><th>Name</th><th style="width:140px;">Marks (/100)</th></tr></thead>
+      <thead><tr><th class="idx">#</th><th>Admission No.</th><th>Name</th><th style="width:140px;">Marks (out of <span id="mMaxLabel">${maxMarks}</span>)</th></tr></thead>
       <tbody>
         ${roster.map((s,i)=>{
           const val = (key in marksState.draft) ? (marksState.draft[key][s.id] ?? '') : (saved[s.id] ?? '');
@@ -1713,14 +1719,14 @@ function marksView(){
             <td class="idx">${i+1}</td>
             <td>${esc(s.admissionNo)}</td>
             <td>${esc(s.name)}</td>
-            <td><input type="number" min="0" max="100" class="markInput" data-sid="${s.id}" value="${val}" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;"></td>
+            <td><input type="number" min="0" max="${maxMarks}" class="markInput" data-sid="${s.id}" value="${val}" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;"></td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>
     <div style="margin-top:16px;display:flex;align-items:center;gap:14px;">
       <button class="btn btn-primary" id="mSave">Save marks</button>
-      <span class="note" id="mSavedNote">${key in DB.marks ? 'Previously saved for this exam.' : ''}</span>
+      <span class="note" id="mSavedNote">${key in DB.marks ? 'Previously saved for this assessment.' : ''}</span>
     </div>`}
   </div>`;
 }
@@ -1742,19 +1748,33 @@ function attachMarksHandlers(){
   document.querySelectorAll('.markInput').forEach(inp=>{
     inp.oninput = ()=>{ marksState.draft[key][inp.dataset.sid] = inp.value; };
   });
+  const maxMarksInput = document.getElementById('mMaxMarks');
+  if(maxMarksInput) maxMarksInput.onchange = ()=>{
+    const val = parseInt(maxMarksInput.value, 10);
+    if(!val || val < 1){ alert('Please enter a valid total marks value.'); return; }
+    DB.marksMax[key] = val;
+    render();
+  };
 
   const save = document.getElementById('mSave');
   if(save) save.onclick = async ()=>{
+    const maxMarks = parseInt(document.getElementById('mMaxMarks').value, 10) || 20;
     const roster = studentsOf(marksState.className, marksState.section, marksState.subject);
     const record = {};
-    roster.forEach(s=>{
+    for(const s of roster){
       const inp = document.querySelector(`.markInput[data-sid="${s.id}"]`);
-      record[s.id] = inp ? inp.value : '';
-    });
+      const val = inp ? inp.value : '';
+      if(val !== '' && (isNaN(parseFloat(val)) || parseFloat(val) > maxMarks || parseFloat(val) < 0)){
+        alert(`${s.name}'s mark must be between 0 and ${maxMarks}.`);
+        return;
+      }
+      record[s.id] = val;
+    }
     DB.marks[key] = record;
+    DB.marksMax[key] = maxMarks;
 
     let promotionNote = '';
-    if(marksState.exam === 'Annual Examination'){
+    if(marksState.exam === 'Summative Assessment'){
       const results = roster.map(s=>checkAndPromoteStudent(s.id)).filter(Boolean);
       if(results.length){
         const promoted = results.filter(r=>r.action==='promoted');
@@ -1776,8 +1796,6 @@ function attachMarksHandlers(){
 let admFormOpen = false;
 let admState = {className:CLASSES[0], section:SECTIONS[0]};
 let admSelectedSubjects = [];
-let admHasAdditional = false;
-let admAdditionalSubject = '';
 function admissionsView(){
   const canAdd = hasOfficeAccess(session);
   const list = [...DB.admissions].reverse();
@@ -1823,32 +1841,26 @@ function admFormModal(){
       </div>
       <div class="row-inline">
         <div class="field"><label>Date of birth</label><input type="date" id="afDob"></div>
-        <div class="field"><label>Contact number</label><input id="afContact"></div>
+        <div class="field"><label>Gender</label><select id="afGender"><option value="Female">Female</option><option value="Male">Male</option></select></div>
       </div>
+      <div class="field"><label>Contact number</label><input id="afContact"></div>
       <div class="row-inline">
         <div class="field"><label>Admitted to class</label><select id="afClass">${CLASSES.map(c=>`<option value="${c}" ${c===admState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
         <div class="field"><label>Section</label><select id="afSection">${SECTIONS.map(s=>`<option ${s===admState.section?'selected':''}>${s}</option>`).join('')}</select></div>
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Choose exactly 5 subjects (${admSelectedSubjects.length}/5 selected)
+        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+admSelectedSubjects.length}/6 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
-        ${SUBJECTS.map(s=>`
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
+          <input type="checkbox" checked disabled> English (compulsory)
+        </label>
+        ${SUBJECTS.filter(s=>s!==DEFAULT_SUBJECT).map(s=>`
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;">
             <input type="checkbox" class="admSubjectCb" value="${esc(s)}" ${admSelectedSubjects.includes(s)?'checked':''} ${(!admSelectedSubjects.includes(s) && admSelectedSubjects.length>=5)?'disabled':''}>
             ${esc(s)}
           </label>`).join('')}
-      </div>
-      <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;margin-bottom:8px;">
-        <input type="checkbox" id="afHasAdditional" ${admHasAdditional?'checked':''} style="width:16px;height:16px;">
-        This student is also taking a 6th (additional) subject
-      </label>
-      <div class="field" style="margin-bottom:16px;">
-        <label>Additional subject</label>
-        <select id="afAdditionalSubject" ${admHasAdditional?'':'disabled'}>
-          ${SUBJECTS.filter(s=>!admSelectedSubjects.includes(s)).map(s=>`<option value="${esc(s)}" ${s===admAdditionalSubject?'selected':''}>${esc(s)}</option>`).join('')}
-        </select>
       </div>` : ''}
       <div class="field"><label>Address</label><input id="afAddress" placeholder="Singhpora Kalan"></div>
       <div class="row-inline">
@@ -1865,9 +1877,9 @@ function admFormModal(){
 }
 function attachAdmissionsHandlers(){
   const addBtn = document.getElementById('addAdmBtn');
-  if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; admState={className:CLASSES[0], section:SECTIONS[0]}; admSelectedSubjects=[]; admHasAdditional=false; admAdditionalSubject=''; render(); };
+  if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; admState={className:CLASSES[0], section:SECTIONS[0]}; admSelectedSubjects=[]; render(); };
   const afClassSel = document.getElementById('afClass');
-  if(afClassSel) afClassSel.onchange = ()=>{ admState.className=afClassSel.value; if(!SENIOR_SECONDARY_CLASSES.includes(admState.className)){ admSelectedSubjects=[]; admHasAdditional=false; admAdditionalSubject=''; } render(); };
+  if(afClassSel) afClassSel.onchange = ()=>{ admState.className=afClassSel.value; if(!SENIOR_SECONDARY_CLASSES.includes(admState.className)){ admSelectedSubjects=[]; } render(); };
   const afSectionSel = document.getElementById('afSection');
   if(afSectionSel) afSectionSel.onchange = ()=>{ admState.section=afSectionSel.value; };
   document.querySelectorAll('.admSubjectCb').forEach(cb=>{
@@ -1877,10 +1889,6 @@ function attachAdmissionsHandlers(){
       render();
     };
   });
-  const hasAdditionalCb = document.getElementById('afHasAdditional');
-  if(hasAdditionalCb) hasAdditionalCb.onchange = ()=>{ admHasAdditional = hasAdditionalCb.checked; render(); };
-  const additionalSel = document.getElementById('afAdditionalSubject');
-  if(additionalSel) additionalSel.onchange = ()=>{ admAdditionalSubject = additionalSel.value; };
   document.querySelectorAll('[data-adm-del]').forEach(b=>{
     b.onclick = async ()=>{
       const adm = DB.admissions.find(a=>a.id===b.dataset.admDel);
@@ -1912,6 +1920,7 @@ function attachAdmissionsHandlers(){
     const fatherName = document.getElementById('afFather').value.trim();
     const motherName = document.getElementById('afMother').value.trim();
     const dob = document.getElementById('afDob').value;
+    const gender = document.getElementById('afGender').value;
     const contact = document.getElementById('afContact').value.trim();
     const className = document.getElementById('afClass').value;
     const section = document.getElementById('afSection').value;
@@ -1920,13 +1929,11 @@ function attachAdmissionsHandlers(){
     if(!admissionNo){ alert('Please enter an admission number.'); return; }
     if(DB.students.some(s=>s.admissionNo===admissionNo)){ alert('That admission number is already in use.'); return; }
     if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length!==5){
-      alert('Please choose exactly 5 subjects for this student.'); return;
+      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
     }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && admHasAdditional && !admAdditionalSubject){
-      alert('Please choose the 6th (additional) subject, or untick the box if not needed.'); return;
-    }
-    const subjects = SENIOR_SECONDARY_CLASSES.includes(className) ? [...admSelectedSubjects] : undefined;
-    const additionalSubject = (SENIOR_SECONDARY_CLASSES.includes(className) && admHasAdditional) ? admAdditionalSubject : undefined;
+    const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
+      ? [DEFAULT_SUBJECT, ...admSelectedSubjects]
+      : [DEFAULT_SUBJECT];
     const seq = (DB.students.length+1).toString().padStart(4,'0');
     const sId = uid('s');
     let username = document.getElementById('afUser').value.trim();
@@ -1952,7 +1959,7 @@ function attachAdmissionsHandlers(){
 
     DB.students.push({
       id:sId, admissionNo, name, fatherName, motherName, dob, className, section,
-      address, contact, admissionDate, status:'active', username, authUid, subjects, additionalSubject
+      address, contact, admissionDate, status:'active', username, authUid, subjects, gender
     });
     DB.admissions.push({id:uid('a'), name, fatherName, className, section, date: admissionDate, status:'Admitted', studentId:sId});
     await saveDB();
@@ -2091,6 +2098,20 @@ function certBodyText(rec, student){
   institution for the academic session ${new Date().getFullYear()}, pending completion of final records.
   ${rec.reason ? `Issued ${esc(rec.reason)}.` : ''}`;
 }
+function openPrintOverlay(bodyHtml){
+  const overlay = document.getElementById('certOverlay');
+  overlay.innerHTML = `
+    <div class="cert-toolbar no-print">
+      <button class="btn btn-outline" style="border-color:#fff;color:#fff;" id="certClose">Close</button>
+      <button class="btn btn-primary" id="certPrint">Print</button>
+    </div>
+    <div class="cert-sheet" style="max-width:920px;">
+      ${bodyHtml}
+    </div>`;
+  overlay.style.display = 'block';
+  document.getElementById('certClose').onclick = ()=>{ overlay.style.display='none'; overlay.innerHTML=''; };
+  document.getElementById('certPrint').onclick = ()=> window.print();
+}
 function openCertOverlay(rec){
   const student = DB.students.find(s=>s.id===rec.studentId);
   const overlay = document.getElementById('certOverlay');
@@ -2222,6 +2243,7 @@ function attachReportCardsHandlers(){
 
 /* ======================= ASSIGNMENTS & PROJECTS ======================= */
 let asgFormOpen = false;
+let reviewingAssignmentId = null;
 function assignmentsView(){
   if(session.role==='student'){
     const student = DB.students.find(s=>s.id===session.linkedId) || session;
@@ -2229,25 +2251,45 @@ function assignmentsView(){
     return `
     <div class="panel">
       <h2>Assignments &amp; projects</h2>
-      ${list.length===0 ? `<div class="empty"><b>Nothing posted yet</b>Your teachers will post assignments and projects here.</div>` : list.map(a=>`
+      ${list.length===0 ? `<div class="empty"><b>Nothing posted yet</b>Your teachers will post assignments and projects here.</div>` : list.map(a=>{
+        const mySub = (a.submissions||[]).slice().reverse().find(sub=>sub.studentId===student.id);
+        return `
         <div class="panel" style="margin-bottom:12px;background:var(--cream);">
           <h3 style="margin:0 0 6px;">${esc(a.title)} <span class="tag">${esc(a.subject)}</span></h3>
           <div class="note" style="margin-bottom:8px;">Posted by ${esc(a.postedBy)} on ${fmtDate(a.postedDate)} ${a.dueDate ? '· Due ' + fmtDate(a.dueDate) : ''}</div>
           <p style="font-size:13.5px;line-height:1.7;white-space:pre-wrap;">${esc(a.description)}</p>
           ${a.fileData ? `<a href="${a.fileData}" download="${esc(a.fileName||'attachment')}" class="link-btn">Download attachment</a>` : ''}
-        </div>`).join('')}
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+            ${mySub ? `
+              <div style="font-size:13px;"><b>Your submission:</b> ${esc(mySub.fileName)} — submitted ${fmtDate(mySub.submittedDate)}
+                <span class="pill ${mySub.status==='approved'?'pill-present':mySub.status==='rejected'?'pill-absent':''}" style="margin-left:8px;">${mySub.status==='approved'?'Approved':mySub.status==='rejected'?'Rejected — please resubmit':'Pending review'}</span>
+              </div>
+              ${mySub.status==='rejected' ? `
+              <div style="margin-top:8px;">
+                <input type="file" id="resubmitFile_${a.id}">
+                <button class="btn btn-outline" data-resubmit="${a.id}" style="margin-top:6px;">Resubmit</button>
+              </div>` : ''}
+            ` : `
+              <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Upload your submission</div>
+              <input type="file" id="submitFile_${a.id}">
+              <button class="btn btn-primary" data-submit="${a.id}" style="margin-top:6px;">Submit</button>
+            `}
+          </div>
+        </div>`;
+      }).join('')}
     </div>`;
   }
   const isTeacher = session.role==='teacher';
   const staffRecordA = isTeacher ? (DB.users.find(u=>u.id===session.linkedId) || session) : null;
   const classOpts = isTeacher ? teacherClassOptions(staffRecordA) : CLASSES.flatMap(c=>SECTIONS.map(s=>({className:c, section:s})));
   const list = DB.assignments.slice().reverse().filter(a=> !isTeacher || a.postedByUserId===session.id);
+  const reviewing = reviewingAssignmentId ? DB.assignments.find(a=>a.id===reviewingAssignmentId) : null;
   return `
   <div class="panel">
     <h2>Assignments &amp; projects <button class="btn btn-primary" id="addAsgBtn">+ Post assignment</button></h2>
     ${list.length===0 ? `<div class="empty"><b>Nothing posted yet</b></div>` : `
     <table>
-      <thead><tr><th class="idx">#</th><th>Class</th><th>Subject</th><th>Title</th><th>Due</th><th></th></tr></thead>
+      <thead><tr><th class="idx">#</th><th>Class</th><th>Subject</th><th>Title</th><th>Due</th><th>Submissions</th><th></th></tr></thead>
       <tbody>
         ${list.map((a,i)=>`
           <tr>
@@ -2256,11 +2298,34 @@ function assignmentsView(){
             <td>${esc(a.subject)}</td>
             <td>${esc(a.title)}</td>
             <td>${a.dueDate ? fmtDate(a.dueDate) : '—'}</td>
+            <td><button class="link-btn" data-review="${a.id}">${(a.submissions||[]).length} — Review</button></td>
             <td>${a.fileData ? `<a href="${a.fileData}" download="${esc(a.fileName||'attachment')}" class="link-btn">File</a> · ` : ''}<button class="link-btn danger" data-asg-del="${a.id}">Delete</button></td>
           </tr>`).join('')}
       </tbody>
     </table>`}
   </div>
+  ${reviewing ? `
+  <div class="panel">
+    <h2>Submissions — ${esc(reviewing.title)}</h2>
+    ${(reviewing.submissions||[]).length===0 ? `<div class="empty"><b>No submissions yet</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Student</th><th>File</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${(reviewing.submissions||[]).slice().reverse().map((sub,i)=>{
+          const stu = DB.students.find(s=>s.id===sub.studentId);
+          return `<tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(stu ? stu.name : 'Unknown')}</td>
+            <td><a href="${sub.fileData}" download="${esc(sub.fileName||'submission')}" class="link-btn">${esc(sub.fileName||'Download')}</a></td>
+            <td>${fmtDate(sub.submittedDate)}</td>
+            <td><span class="pill ${sub.status==='approved'?'pill-present':sub.status==='rejected'?'pill-absent':''}">${sub.status==='approved'?'Approved':sub.status==='rejected'?'Rejected':'Pending'}</span></td>
+            <td>${sub.status==='pending' ? `<button class="link-btn" data-approve-sub="${reviewing.id}|${sub.studentId}|${sub.submittedDate}">Approve</button> · <button class="link-btn danger" data-reject-sub="${reviewing.id}|${sub.studentId}|${sub.submittedDate}">Reject</button>` : ''}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`}
+    <button class="btn btn-outline" id="closeReviewBtn" style="margin-top:12px;">Close</button>
+  </div>` : ''}
   ${asgFormOpen ? assignmentFormModal(classOpts) : ''}`;
 }
 function assignmentFormModal(classOpts){
@@ -2315,12 +2380,75 @@ function attachAssignmentsHandlers(){
       DB.assignments.push({
         id:uid('asg'), className, section, subject, title, description, dueDate,
         fileName: file ? file.name : '', fileData: file ? file.data : '',
-        postedBy: session.name, postedByUserId: session.id, postedDate: todayISO()
+        postedBy: session.name, postedByUserId: session.id, postedDate: todayISO(), submissions: []
       });
       await saveDB();
       asgFormOpen=false; render();
     }catch(e){ alert(e.message || 'Could not read that file.'); }
   };
+
+  // Student: submit / resubmit
+  document.querySelectorAll('[data-submit]').forEach(b=>{
+    b.onclick = async ()=>{
+      const asgId = b.dataset.submit;
+      const fileInput = document.getElementById('submitFile_'+asgId);
+      if(!fileInput.files[0]){ alert('Please choose a file first.'); return; }
+      const asg = DB.assignments.find(a=>a.id===asgId);
+      if(!asg) return;
+      try{
+        const file = await readFileAsDataURL(fileInput.files[0]);
+        if(!asg.submissions) asg.submissions = [];
+        const student = DB.students.find(s=>s.id===session.linkedId);
+        asg.submissions.push({
+          studentId: session.linkedId, fileName:file.name, fileData:file.data,
+          submittedDate: todayISO(), status:'pending'
+        });
+        await saveDB();
+        render();
+      }catch(e){ alert(e.message || 'Could not read that file.'); }
+    };
+  });
+  document.querySelectorAll('[data-resubmit]').forEach(b=>{
+    b.onclick = async ()=>{
+      const asgId = b.dataset.resubmit;
+      const fileInput = document.getElementById('resubmitFile_'+asgId);
+      if(!fileInput.files[0]){ alert('Please choose a file first.'); return; }
+      const asg = DB.assignments.find(a=>a.id===asgId);
+      if(!asg) return;
+      try{
+        const file = await readFileAsDataURL(fileInput.files[0]);
+        asg.submissions.push({
+          studentId: session.linkedId, fileName:file.name, fileData:file.data,
+          submittedDate: todayISO(), status:'pending'
+        });
+        await saveDB();
+        render();
+      }catch(e){ alert(e.message || 'Could not read that file.'); }
+    };
+  });
+
+  // Teacher: review submissions
+  document.querySelectorAll('[data-review]').forEach(b=>{
+    b.onclick = ()=>{ reviewingAssignmentId = b.dataset.review; render(); };
+  });
+  const closeReview = document.getElementById('closeReviewBtn');
+  if(closeReview) closeReview.onclick = ()=>{ reviewingAssignmentId = null; render(); };
+  document.querySelectorAll('[data-approve-sub]').forEach(b=>{
+    b.onclick = async ()=>{
+      const [asgId, studentId, submittedDate] = b.dataset.approveSub.split('|');
+      const asg = DB.assignments.find(a=>a.id===asgId);
+      const sub = asg && asg.submissions.find(s=>s.studentId===studentId && s.submittedDate===submittedDate);
+      if(sub){ sub.status = 'approved'; await saveDB(); render(); }
+    };
+  });
+  document.querySelectorAll('[data-reject-sub]').forEach(b=>{
+    b.onclick = async ()=>{
+      const [asgId, studentId, submittedDate] = b.dataset.rejectSub.split('|');
+      const asg = DB.assignments.find(a=>a.id===asgId);
+      const sub = asg && asg.submissions.find(s=>s.studentId===studentId && s.submittedDate===submittedDate);
+      if(sub){ sub.status = 'rejected'; await saveDB(); render(); }
+    };
+  });
 }
 
 /* ======================= CIRCULARS & ORDERS (staff only) ======================= */
@@ -2669,6 +2797,7 @@ function attachBackupHandlers(){
         if(!DB.circulars) DB.circulars = [];
         if(!DB.accountEntries) DB.accountEntries = [];
         if(!DB.approvals) DB.approvals = [];
+        if(!DB.marksMax) DB.marksMax = {};
         await saveDB();
         alert('Backup restored successfully.');
         render();
@@ -2703,6 +2832,330 @@ function attachBackupHandlers(){
       alert('Could not complete the deletion: ' + e.message);
       deleteAllBtn.disabled = false; deleteAllBtn.textContent = 'Delete all students permanently';
     }
+  };
+}
+
+/* ======================= CLASS ROLL ======================= */
+let rollState = {className:CLASSES[0], section:SECTIONS[0]};
+function classRollView(){
+  const roster = studentsOf(rollState.className, rollState.section).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const boys = roster.filter(s=>s.gender==='Male').length;
+  const girls = roster.filter(s=>s.gender!=='Male').length; // default to Female if unspecified
+  return `
+  <div class="panel">
+    <h2>Class roll register</h2>
+    <div class="row-inline">
+      <div class="field"><label>Class</label><select id="rollClass">${CLASSES.map(c=>`<option value="${c}" ${c===rollState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Section</label><select id="rollSection">${SECTIONS.map(s=>`<option ${s===rollState.section?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="grid grid-3" style="margin-bottom:18px;">
+      <div class="stat-card"><div class="num">${girls}</div><div class="lbl">Girls</div></div>
+      <div class="stat-card"><div class="num">${boys}</div><div class="lbl">Boys</div></div>
+      <div class="stat-card"><div class="num">${roster.length}</div><div class="lbl">Total</div></div>
+    </div>
+    <button class="btn btn-primary" id="rollPrintBtn" style="margin-bottom:16px;">Print class roll</button>
+    ${roster.length===0 ? `<div class="empty"><b>No students in this class-section</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Admission No.</th><th>Name</th><th>Father's Name</th><th>Gender</th><th>Date of birth</th></tr></thead>
+      <tbody>
+        ${roster.map((s,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td>
+            <td>${esc(s.admissionNo)}</td>
+            <td>${esc(s.name)}</td>
+            <td>${esc(s.fatherName)}</td>
+            <td>${esc(s.gender||'Female')}</td>
+            <td>${s.dob ? fmtDate(s.dob) : '—'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>`;
+}
+function attachClassRollHandlers(){
+  const cSel = document.getElementById('rollClass');
+  if(cSel) cSel.onchange = ()=>{ rollState.className=cSel.value; render(); };
+  const sSel = document.getElementById('rollSection');
+  if(sSel) sSel.onchange = ()=>{ rollState.section=sSel.value; render(); };
+  const printBtn = document.getElementById('rollPrintBtn');
+  if(printBtn) printBtn.onclick = ()=>{
+    const roster = studentsOf(rollState.className, rollState.section).slice().sort((a,b)=>a.name.localeCompare(b.name));
+    const boys = roster.filter(s=>s.gender==='Male').length;
+    const girls = roster.filter(s=>s.gender!=='Male').length;
+    const body = `
+      <div class="cert-head">
+        <div style="display:flex;justify-content:center;">${sealSVG(60)}</div>
+        <div class="sch">${SCHOOL_NAME}</div>
+        <div class="addr">${SCHOOL_LOC}, Jammu &amp; Kashmir</div>
+      </div>
+      <div class="cert-title">Class Roll — Class ${esc(rollState.className)}-${esc(rollState.section)}</div>
+      <p style="text-align:center;font-size:13px;margin-bottom:16px;">Girls: <b>${girls}</b> &nbsp; Boys: <b>${boys}</b> &nbsp; Total: <b>${roster.length}</b> &nbsp; As on ${fmtDate(todayISO())}</p>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr>
+          <th style="border:1px solid #999;padding:5px;">#</th>
+          <th style="border:1px solid #999;padding:5px;">Admission No.</th>
+          <th style="border:1px solid #999;padding:5px;">Name</th>
+          <th style="border:1px solid #999;padding:5px;">Father's Name</th>
+          <th style="border:1px solid #999;padding:5px;">Gender</th>
+          <th style="border:1px solid #999;padding:5px;">Date of birth</th>
+        </tr></thead>
+        <tbody>
+          ${roster.map((s,i)=>`<tr>
+            <td style="border:1px solid #999;padding:5px;">${i+1}</td>
+            <td style="border:1px solid #999;padding:5px;">${esc(s.admissionNo)}</td>
+            <td style="border:1px solid #999;padding:5px;">${esc(s.name)}</td>
+            <td style="border:1px solid #999;padding:5px;">${esc(s.fatherName)}</td>
+            <td style="border:1px solid #999;padding:5px;">${esc(s.gender||'Female')}</td>
+            <td style="border:1px solid #999;padding:5px;">${s.dob ? fmtDate(s.dob) : '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+    openPrintOverlay(body);
+  };
+}
+
+/* ======================= ATTENDANCE REPORTS ======================= */
+let attReportState = {mode:'date', className:CLASSES[0], section:SECTIONS[0], date:todayISO(), month:todayISO().slice(0,7), studentId:''};
+function daysInMonth(monthStr){
+  const [y,m] = monthStr.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function attendanceReportsView(){
+  const isTeacher = session.role==='teacher';
+  const staffRecord = isTeacher ? (DB.users.find(u=>u.id===session.linkedId) || session) : null;
+  const classOpts = isTeacher ? teacherClassOptions(staffRecord) : CLASSES.flatMap(c=>SECTIONS.map(sec=>({className:c, section:sec})));
+  if(!classOpts.some(c=>c.className===attReportState.className && c.section===attReportState.section)){
+    attReportState.className = classOpts[0] ? classOpts[0].className : CLASSES[0];
+    attReportState.section = classOpts[0] ? classOpts[0].section : SECTIONS[0];
+  }
+  const roster = studentsOf(attReportState.className, attReportState.section).slice().sort((a,b)=>a.name.localeCompare(b.name));
+
+  let body = '';
+  if(attReportState.mode==='date'){
+    const key = `${attReportState.className}-${attReportState.section}-${attReportState.date}`;
+    const rec = DB.attendance[key] || {};
+    body = `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Admission No.</th><th>Name</th><th>Status</th></tr></thead>
+      <tbody>
+        ${roster.map((s,i)=>`
+          <tr>
+            <td class="idx">${i+1}</td><td>${esc(s.admissionNo)}</td><td>${esc(s.name)}</td>
+            <td><span class="pill ${rec[s.id]==='P'?'pill-present':'pill-absent'}">${rec[s.id]==='P'?'Present':rec[s.id]==='A'?'Absent':'Not marked'}</span></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  } else if(attReportState.mode==='month'){
+    const numDays = daysInMonth(attReportState.month);
+    const days = Array.from({length:numDays}, (_,i)=>i+1);
+    body = `
+    <div style="overflow-x:auto;">
+    <table style="font-size:11.5px;">
+      <thead><tr><th class="idx">#</th><th>Name</th>${days.map(d=>`<th style="padding:3px;">${d}</th>`).join('')}<th>Present</th></tr></thead>
+      <tbody>
+        ${roster.map((s,i)=>{
+          let presentCount = 0;
+          const cells = days.map(d=>{
+            const dateStr = `${attReportState.month}-${String(d).padStart(2,'0')}`;
+            const rec = DB.attendance[`${attReportState.className}-${attReportState.section}-${dateStr}`];
+            const v = rec ? rec[s.id] : undefined;
+            if(v==='P') presentCount++;
+            return `<td style="text-align:center;padding:3px;color:${v==='P'?'#1e7a34':v==='A'?'#b3261e':'#ccc'};">${v||'·'}</td>`;
+          }).join('');
+          return `<tr><td class="idx">${i+1}</td><td>${esc(s.name)}</td>${cells}<td style="text-align:center;font-weight:600;">${presentCount}</td></tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>`;
+  } else if(attReportState.mode==='student'){
+    const student = DB.students.find(s=>s.id===attReportState.studentId);
+    if(!student){
+      body = `<div class="empty"><b>Choose a student above</b></div>`;
+    } else {
+      const prefix = `${student.className}-${student.section}-`;
+      const rows = Object.keys(DB.attendance)
+        .filter(k=>k.startsWith(prefix) && DB.attendance[k][student.id])
+        .map(k=>({date:k.slice(prefix.length), status:DB.attendance[k][student.id]}))
+        .sort((a,b)=> b.date.localeCompare(a.date));
+      const presentCount = rows.filter(r=>r.status==='P').length;
+      body = `
+      <p style="font-size:13.5px;margin-bottom:12px;"><b>${esc(student.name)}</b> — Class ${esc(student.className)}-${esc(student.section)} — ${presentCount}/${rows.length} days present</p>
+      <table>
+        <thead><tr><th class="idx">#</th><th>Date</th><th>Status</th></tr></thead>
+        <tbody>
+          ${rows.map((r,i)=>`<tr><td class="idx">${i+1}</td><td>${fmtDate(r.date)}</td><td><span class="pill ${r.status==='P'?'pill-present':'pill-absent'}">${r.status==='P'?'Present':'Absent'}</span></td></tr>`).join('')}
+        </tbody>
+      </table>`;
+    }
+  }
+
+  return `
+  <div class="panel">
+    <h2>Attendance reports</h2>
+    <div class="row-inline">
+      <div class="field"><label>View</label>
+        <select id="artMode">
+          <option value="date" ${attReportState.mode==='date'?'selected':''}>By date (whole class)</option>
+          <option value="month" ${attReportState.mode==='month'?'selected':''}>By month (whole class)</option>
+          <option value="student" ${attReportState.mode==='student'?'selected':''}>By individual student</option>
+        </select>
+      </div>
+      ${isTeacher ? `<div class="field"><label>Class</label>
+        <select id="artClassSec">${classOpts.map(c=>`<option value="${c.className}|${c.section}" ${c.className===attReportState.className && c.section===attReportState.section?'selected':''}>Class ${c.className}-${c.section}</option>`).join('')}</select>
+      </div>` : `
+      <div class="field"><label>Class</label><select id="artClass">${CLASSES.map(c=>`<option value="${c}" ${c===attReportState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Section</label><select id="artSection">${SECTIONS.map(x=>`<option ${x===attReportState.section?'selected':''}>${x}</option>`).join('')}</select></div>
+      `}
+      ${attReportState.mode==='date' ? `<div class="field"><label>Date</label><input type="date" id="artDate" value="${attReportState.date}" max="${todayISO()}"></div>` : ''}
+      ${attReportState.mode==='month' ? `<div class="field"><label>Month</label><input type="month" id="artMonth" value="${attReportState.month}"></div>` : ''}
+      ${attReportState.mode==='student' ? `<div class="field"><label>Student</label>
+        <select id="artStudent"><option value="">Choose…</option>${roster.map(s=>`<option value="${s.id}" ${s.id===attReportState.studentId?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
+      </div>` : ''}
+    </div>
+    <button class="btn btn-primary" id="artPrintBtn" style="margin-bottom:16px;">Print this report</button>
+    ${roster.length===0 && attReportState.mode!=='student' ? `<div class="empty"><b>No students in this class-section</b></div>` : body}
+  </div>`;
+}
+function attachAttendanceReportsHandlers(){
+  const modeSel = document.getElementById('artMode');
+  if(modeSel) modeSel.onchange = ()=>{ attReportState.mode=modeSel.value; render(); };
+  const cSel = document.getElementById('artClass');
+  if(cSel) cSel.onchange = ()=>{ attReportState.className=cSel.value; render(); };
+  const sSel = document.getElementById('artSection');
+  if(sSel) sSel.onchange = ()=>{ attReportState.section=sSel.value; render(); };
+  const csSel = document.getElementById('artClassSec');
+  if(csSel) csSel.onchange = ()=>{ const [c,s]=csSel.value.split('|'); attReportState.className=c; attReportState.section=s; render(); };
+  const dSel = document.getElementById('artDate');
+  if(dSel) dSel.onchange = ()=>{ attReportState.date=dSel.value; render(); };
+  const mSel = document.getElementById('artMonth');
+  if(mSel) mSel.onchange = ()=>{ attReportState.month=mSel.value; render(); };
+  const stuSel = document.getElementById('artStudent');
+  if(stuSel) stuSel.onchange = ()=>{ attReportState.studentId=stuSel.value; render(); };
+
+  const printBtn = document.getElementById('artPrintBtn');
+  if(printBtn) printBtn.onclick = ()=>{
+    const content = document.querySelector('.content');
+    const panel = content ? content.querySelector('.panel') : null;
+    const tableHtml = panel ? panel.innerHTML : '';
+    const body = `
+      <div class="cert-head">
+        <div style="display:flex;justify-content:center;">${sealSVG(60)}</div>
+        <div class="sch">${SCHOOL_NAME}</div>
+        <div class="addr">${SCHOOL_LOC}, Jammu &amp; Kashmir</div>
+      </div>
+      <div class="cert-title">Attendance Report — Class ${esc(attReportState.className)}-${esc(attReportState.section)}</div>
+      <p style="text-align:center;font-size:12.5px;margin-bottom:14px;">
+        ${attReportState.mode==='date' ? 'Date: ' + fmtDate(attReportState.date) : attReportState.mode==='month' ? 'Month: ' + attReportState.month : 'Individual student record'}
+      </p>
+      ${tableHtml}`;
+    openPrintOverlay(body);
+  };
+}
+
+/* ======================= MARKS CARD ======================= */
+let marksCardState = {className:CLASSES[0], section:SECTIONS[0], studentId:''};
+function marksCardView(){
+  const roster = studentsOf(marksCardState.className, marksCardState.section).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const student = DB.students.find(s=>s.id===marksCardState.studentId);
+
+  let rows = [];
+  if(student){
+    const prefix = `${student.className}-${student.section}-`;
+    Object.keys(DB.marks).forEach(k=>{
+      if(!k.startsWith(prefix)) return;
+      const val = DB.marks[k][student.id];
+      if(val===undefined || val==='') return;
+      const rest = k.slice(prefix.length);
+      // rest = "<exam>-<subject>" — exam names are fixed and known, so match against EXAMS list
+      const exam = EXAMS.find(e=>rest.startsWith(e+'-'));
+      if(!exam) return;
+      const subject = rest.slice(exam.length+1);
+      const max = DB.marksMax[k] || '';
+      rows.push({exam, subject, val, max});
+    });
+    rows.sort((a,b)=> EXAMS.indexOf(a.exam)-EXAMS.indexOf(b.exam) || a.subject.localeCompare(b.subject));
+  }
+
+  return `
+  <div class="panel">
+    <h2>Generate marks card</h2>
+    <div class="row-inline">
+      <div class="field"><label>Class</label><select id="mcClass">${CLASSES.map(c=>`<option value="${c}" ${c===marksCardState.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Section</label><select id="mcSection">${SECTIONS.map(x=>`<option ${x===marksCardState.section?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Student</label>
+        <select id="mcStudent"><option value="">Choose…</option>${roster.map(s=>`<option value="${s.id}" ${s.id===marksCardState.studentId?'selected':''}>${esc(s.name)} (${esc(s.admissionNo)})</option>`).join('')}</select>
+      </div>
+    </div>
+    ${!student ? `<div class="empty"><b>Choose a student above</b></div>` : `
+    <button class="btn btn-primary" id="mcPrintBtn" style="margin-bottom:16px;">Print marks card</button>
+    ${rows.length===0 ? `<div class="empty"><b>No marks recorded yet for this student</b></div>` : `
+    <table>
+      <thead><tr><th class="idx">#</th><th>Assessment</th><th>Subject</th><th>Marks</th></tr></thead>
+      <tbody>
+        ${rows.map((r,i)=>`<tr><td class="idx">${i+1}</td><td>${esc(r.exam)}</td><td>${esc(r.subject)}</td><td>${esc(r.val)}${r.max?' / '+esc(r.max):''}</td></tr>`).join('')}
+      </tbody>
+    </table>`}`}
+  </div>`;
+}
+function attachMarksCardHandlers(){
+  const cSel = document.getElementById('mcClass');
+  if(cSel) cSel.onchange = ()=>{ marksCardState.className=cSel.value; marksCardState.studentId=''; render(); };
+  const sSel = document.getElementById('mcSection');
+  if(sSel) sSel.onchange = ()=>{ marksCardState.section=sSel.value; marksCardState.studentId=''; render(); };
+  const stuSel = document.getElementById('mcStudent');
+  if(stuSel) stuSel.onchange = ()=>{ marksCardState.studentId=stuSel.value; render(); };
+
+  const printBtn = document.getElementById('mcPrintBtn');
+  if(printBtn) printBtn.onclick = ()=>{
+    const student = DB.students.find(s=>s.id===marksCardState.studentId);
+    if(!student) return;
+    const prefix = `${student.className}-${student.section}-`;
+    let rows = [];
+    Object.keys(DB.marks).forEach(k=>{
+      if(!k.startsWith(prefix)) return;
+      const val = DB.marks[k][student.id];
+      if(val===undefined || val==='') return;
+      const rest = k.slice(prefix.length);
+      const exam = EXAMS.find(e=>rest.startsWith(e+'-'));
+      if(!exam) return;
+      const subject = rest.slice(exam.length+1);
+      const max = DB.marksMax[k] || '';
+      rows.push({exam, subject, val, max});
+    });
+    rows.sort((a,b)=> EXAMS.indexOf(a.exam)-EXAMS.indexOf(b.exam) || a.subject.localeCompare(b.subject));
+
+    const body = `
+      <div class="cert-head">
+        <div style="display:flex;justify-content:center;">${sealSVG(60)}</div>
+        <div class="sch">${SCHOOL_NAME}</div>
+        <div class="addr">${SCHOOL_LOC}, Jammu &amp; Kashmir</div>
+      </div>
+      <div class="cert-title">Marks Card</div>
+      <p style="text-align:center;font-size:13px;margin-bottom:4px;"><b>${esc(student.name)}</b></p>
+      <p style="text-align:center;font-size:12.5px;margin-bottom:16px;">Admission No. ${esc(student.admissionNo)} — Class ${esc(student.className)}-${esc(student.section)}</p>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead><tr>
+          <th style="border:1px solid #999;padding:5px;">#</th>
+          <th style="border:1px solid #999;padding:5px;">Assessment</th>
+          <th style="border:1px solid #999;padding:5px;">Subject</th>
+          <th style="border:1px solid #999;padding:5px;">Marks</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((r,i)=>`<tr>
+            <td style="border:1px solid #999;padding:5px;">${i+1}</td>
+            <td style="border:1px solid #999;padding:5px;">${esc(r.exam)}</td>
+            <td style="border:1px solid #999;padding:5px;">${esc(r.subject)}</td>
+            <td style="border:1px solid #999;padding:5px;">${esc(r.val)}${r.max?' / '+esc(r.max):''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="cert-foot">
+        <div>Date: ${fmtDate(todayISO())}</div>
+        <div style="text-align:center;">
+          <div style="height:40px;"></div>
+          <div style="border-top:1px solid var(--ink);padding-top:4px;">Principal<br>${SCHOOL_NAME}</div>
+        </div>
+      </div>`;
+    openPrintOverlay(body);
   };
 }
 
