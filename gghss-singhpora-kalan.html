@@ -1390,7 +1390,7 @@ function studentEditModal(s){
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+editSelectedSubjects.length}/6 selected)
+        Subjects (English is compulsory — choose 4 more; a 5th is optional: ${1+editSelectedSubjects.length}/6 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
@@ -1507,8 +1507,8 @@ function attachStudentsHandlers(){
     if(admissionNo !== s.admissionNo && DB.students.some(x=>x.id!==s.id && x.admissionNo===admissionNo)){
       alert('That admission number is already used by another student.'); return;
     }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length!==5){
-      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length<4){
+      alert('Please choose at least 4 more subjects (English is already compulsory) — the 5th is optional.'); return;
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...editSelectedSubjects]
@@ -1869,7 +1869,7 @@ function admFormModal(){
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+admSelectedSubjects.length}/6 selected)
+        Subjects (English is compulsory — choose 4 more; a 5th is optional: ${1+admSelectedSubjects.length}/6 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
@@ -1947,8 +1947,8 @@ function attachAdmissionsHandlers(){
     if(!name || !fatherName){ alert('Please enter at least the student and father\'s name.'); return; }
     if(!admissionNo){ alert('Please enter an admission number.'); return; }
     if(DB.students.some(s=>s.admissionNo===admissionNo)){ alert('That admission number is already in use.'); return; }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length!==5){
-      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length<4){
+      alert('Please choose at least 4 more subjects (English is already compulsory) — the 5th is optional.'); return;
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...admSelectedSubjects]
