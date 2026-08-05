@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk Import — Class 11 Admissions — GGHSS Singhpora Kalan</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#F6F1E4;color:#2A2A26;margin:0;padding:20px;}
+  h1{font-size:20px;color:#1B3A5C;}
+  .note{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;margin-bottom:16px;font-size:13.5px;line-height:1.7;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:12px;font-weight:600;color:#555;}
+  .field select, .field input{padding:8px;border:1px solid #ccc;border-radius:4px;font-size:14px;}
+  table{width:100%;border-collapse:collapse;background:#fff;font-size:12.5px;margin-bottom:16px;}
+  th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;}
+  th{background:#1B3A5C;color:#fff;}
+  tr.dup{background:#fdecea;color:#999;}
+  tr.dup td{text-decoration:line-through;}
+  .btn{background:#1B3A5C;color:#fff;border:none;padding:12px 22px;border-radius:5px;font-size:15px;cursor:pointer;font-weight:600;}
+  .btn:disabled{background:#999;cursor:not-allowed;}
+  #status{margin-top:16px;padding:12px;border-radius:5px;font-size:14px;white-space:pre-wrap;}
+  .status-ok{background:#e6f4ea;color:#1e7a34;}
+  .status-err{background:#fdecea;color:#b3261e;}
+  .status-info{background:#eaf1fb;color:#1B3A5C;}
+</style>
+</head>
+<body>
+<h1>Bulk Import — Class 11 Admissions (2026)</h1>
+<div class="note">
+  This is a one-time import tool, completely separate from the main school app file — it does not
+  modify <code>gghss-singhpora-kalan.html</code> in any way. It connects to the same shared database
+  and adds these students directly to the Admission Register, the same as if they'd been entered
+  one by one through the app's own "New Admission" form.<br><br>
+  <b>Students already in the system (matched by Admission No.) are automatically detected below and
+  skipped</b>, so it's safe to run even after you've already manually added a few of them.
+</div>
+
+<div class="row">
+  <div class="field">
+    <label>Section for all these students</label>
+    <select id="sectionSelect"><option value="A">A</option><option value="B">B</option></select>
+  </div>
+  <div class="field">
+    <label>Date of admission (applied to all)</label>
+    <input type="date" id="admDate">
+  </div>
+</div>
+
+<div id="tableWrap"><p>Checking for already-added students…</p></div>
+
+<button class="btn" id="importBtn" disabled>Checking…</button>
+<div id="status"></div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
+    authDomain: "gghss-singhpora-kalan-sms.firebaseapp.com",
+    projectId: "gghss-singhpora-kalan-sms",
+    storageBucket: "gghss-singhpora-kalan-sms.firebasestorage.app",
+    messagingSenderId: "1001470406359",
+    appId: "1:1001470406359:web:b3c277b667da5263bb0a92",
+    measurementId: "G-GRLC5GMK15"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const SCHOOL_DOC = db.collection('school').doc('main');
+
+  const PARSED_STUDENTS = [
+  {
+    "admissionNo": "GGHSS-528",
+    "name": "Maleeha Irshad",
+    "fatherName": "Irshad Ahmad Khan",
+    "motherName": "Shahzada Shaheen",
+    "address": "Bimyar Boniyar Baramulla",
+    "dob": "2010-10-31",
+    "rollNo": "1"
+  },
+  {
+    "admissionNo": "GGHSS-529",
+    "name": "Aleena Tariq",
+    "fatherName": "Tariq Ahmad Bhat",
+    "motherName": "Maisarah Tariq",
+    "address": "Singhpora Kalan",
+    "dob": "2010-07-22",
+    "rollNo": "2"
+  },
+  {
+    "admissionNo": "GGHSS-530",
+    "name": "Kafeela Gulshan",
+    "fatherName": "Gulshan Ahmad Magray",
+    "motherName": "Rifat Maqbool",
+    "address": "Hudpora",
+    "dob": "2009-10-28",
+    "rollNo": "3"
+  },
+  {
+    "admissionNo": "GGHSS-531",
+    "name": "Vanshika Singha Sodhi",
+    "fatherName": "Sandeep Singh",
+    "motherName": "Harmeet Kour",
+    "address": "Kanispora",
+    "dob": "2010-07-06",
+    "rollNo": "4"
+  },
+  {
+    "admissionNo": "GGHSS-532",
+    "name": "Navneet Kour",
+    "fatherName": "Rajinder Singh",
+    "motherName": "Gurmeet Kour",
+    "address": "Singhpora Kalan",
+    "dob": "2010-02-25",
+    "rollNo": "5"
+  },
+  {
+    "admissionNo": "GGHSS-533",
+    "name": "Areeba Jan",
+    "fatherName": "Mohammad Saleem Malik",
+    "motherName": "Arifa Jan",
+    "address": "Singhpora Kalan",
+    "dob": "2010-08-14",
+    "rollNo": "6"
+  },
+  {
+    "admissionNo": "GGHSS-534",
+    "name": "Jasman Pal Kour",
+    "fatherName": "Shaminder Pal Singh Bali",
+    "motherName": "Tanbir Kour",
+    "address": "Kanispora",
+    "dob": "2009-10-14",
+    "rollNo": "7"
+  },
+  {
+    "admissionNo": "GGHSS-535",
+    "name": "Simranjeet Singh Wazir",
+    "fatherName": "Surjit Singh Wazir",
+    "motherName": "Permeet Kour",
+    "address": "Mandina Dangiwacha Baramulla",
+    "dob": "2010-03-28",
+    "rollNo": "8"
+  },
+  {
+    "admissionNo": "GGHSS-536",
+    "name": "Noman Shaban",
+    "fatherName": "Mohammad Shaban Mir",
+    "motherName": "Gulnaz Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2010-10-10",
+    "rollNo": "9"
+  },
+  {
+    "admissionNo": "GGHSS-537",
+    "name": "Aasim Ayoub Manknoo",
+    "fatherName": "Mohammad Ayoub Manknoo",
+    "motherName": "Raihanah Abid Ali",
+    "address": "Kanlibagh Baramulla",
+    "dob": "2010-03-23",
+    "rollNo": "10"
+  },
+  {
+    "admissionNo": "GGHSS-538",
+    "name": "Tarandeep Singh",
+    "fatherName": "Joginder Singh",
+    "motherName": "Paramjeet Kour",
+    "address": "Gohan Lari Jungle Baramulla",
+    "dob": "2010-02-14",
+    "rollNo": "11"
+  },
+  {
+    "admissionNo": "GGHSS-539",
+    "name": "Rizwan Hussain Khan",
+    "fatherName": "Mohammad Ishaq Khan",
+    "motherName": "Rukhsana Begum",
+    "address": "Kalampora",
+    "dob": "2010-10-06",
+    "rollNo": "12"
+  },
+  {
+    "admissionNo": "GGHSS-540",
+    "name": "Farhan Imtiyaz Wani",
+    "fatherName": "Imtiyaz Ahmad Wani",
+    "motherName": "Parveena Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2010-06-23",
+    "rollNo": "13"
+  },
+  {
+    "admissionNo": "GGHSS-541",
+    "name": "Wamiq Ahmad Mir",
+    "fatherName": "Asgar Ahmad Mir",
+    "motherName": "Rehana Begum",
+    "address": "Khawajabagh Baramulla",
+    "dob": "2009-05-07",
+    "rollNo": "14"
+  },
+  {
+    "admissionNo": "GGHSS-542",
+    "name": "Mohsin Javid",
+    "fatherName": "Javid Ahmad Sofi",
+    "motherName": "Shareefa Begum",
+    "address": "Jahama Baramulla",
+    "dob": "2009-03-10",
+    "rollNo": "15"
+  },
+  {
+    "admissionNo": "GGHSS-543",
+    "name": "Alaam Hamid Mir",
+    "fatherName": "Hamid Ali Mir",
+    "motherName": "Mehbooba Akhter",
+    "address": "Singhpora Kalan",
+    "dob": "2009-05-25",
+    "rollNo": "16"
+  },
+  {
+    "admissionNo": "GGHSS-544",
+    "name": "Bilal Ahmad Dar",
+    "fatherName": "Mohammad Ayub Dar",
+    "motherName": "Sufaya",
+    "address": "Dangerpora Sopore",
+    "dob": "2009-11-22",
+    "rollNo": "17"
+  },
+  {
+    "admissionNo": "GGHSS-545",
+    "name": "Farhana Amin",
+    "fatherName": "Mohammad Amin Bhat",
+    "motherName": "Mehjabeen Begum",
+    "address": "Check Kanispora",
+    "dob": "2010-08-21",
+    "rollNo": "18"
+  },
+  {
+    "admissionNo": "GGHSS-546",
+    "name": "Ruqaya Aziz",
+    "fatherName": "Abdul Aziz Kumar",
+    "motherName": "Sara Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2011-08-10",
+    "rollNo": "19"
+  },
+  {
+    "admissionNo": "GGHSS-547",
+    "name": "Nazakat Mushtaq",
+    "fatherName": "Mushtaq Ahmad Dar",
+    "motherName": "Jabeena Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2010-03-09",
+    "rollNo": "20"
+  },
+  {
+    "admissionNo": "GGHSS-548",
+    "name": "Shazia Afzal",
+    "fatherName": "Mohammad Afzal Khan",
+    "motherName": "Shameema Begum",
+    "address": "Kalampora",
+    "dob": "2010-10-09",
+    "rollNo": "21"
+  },
+  {
+    "admissionNo": "GGHSS-549",
+    "name": "Qurat-ul-Ain",
+    "fatherName": "Javid Ahmad Najar",
+    "motherName": "Rifat Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2009-10-15",
+    "rollNo": "22"
+  },
+  {
+    "admissionNo": "GGHSS-550",
+    "name": "Zahida Jan",
+    "fatherName": "Habib-ul-Islam Kumar",
+    "motherName": "Shahnaza Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2011-07-05",
+    "rollNo": "23"
+  },
+  {
+    "admissionNo": "GGHSS-551",
+    "name": "Khushboo Fida",
+    "fatherName": "Fida Hussain Khan",
+    "motherName": "Shafiqa Begum",
+    "address": "Kalampora",
+    "dob": "2011-01-10",
+    "rollNo": "24"
+  },
+  {
+    "admissionNo": "GGHSS-552",
+    "name": "Aamina Rashid",
+    "fatherName": "Abdul Rashid Wani",
+    "motherName": "Dilshada Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2007-10-15",
+    "rollNo": "25"
+  },
+  {
+    "admissionNo": "GGHSS-553",
+    "name": "Aasif Shafi",
+    "fatherName": "Mohammad Shafi Sofi",
+    "motherName": "Nazeema Begum",
+    "address": "Jahama",
+    "dob": "2011-07-16",
+    "rollNo": "26"
+  },
+  {
+    "admissionNo": "GGHSS-554",
+    "name": "Furkan Amin",
+    "fatherName": "Mohd Amin Sofi",
+    "motherName": "Shamshada Begum",
+    "address": "Jahama",
+    "dob": "2008-12-30",
+    "rollNo": "27"
+  },
+  {
+    "admissionNo": "GGHSS-555",
+    "name": "Athar Maqbool",
+    "fatherName": "Mohammad Maqbool Sofi",
+    "motherName": "Shameema Begum",
+    "address": "Jahama",
+    "dob": "2011-04-05",
+    "rollNo": "28"
+  },
+  {
+    "admissionNo": "GGHSS-556",
+    "name": "Aaqib Rashid",
+    "fatherName": "Abdul Rashid Sofi",
+    "motherName": "Ameena Begum",
+    "address": "Jahama",
+    "dob": "2008-09-13",
+    "rollNo": "29"
+  },
+  {
+    "admissionNo": "GGHSS-557",
+    "name": "Imran Nisar",
+    "fatherName": "Nisar Ahmad Dar",
+    "motherName": "Ruhina Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2010-06-09",
+    "rollNo": "30"
+  },
+  {
+    "admissionNo": "GGHSS-558",
+    "name": "Navid Rashid Kumar",
+    "fatherName": "Abdul Rashid Kumar",
+    "motherName": "Saleema Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2010-03-10",
+    "rollNo": "31"
+  },
+  {
+    "admissionNo": "GGHSS-559",
+    "name": "Mohammad Amaar Ganaie",
+    "fatherName": "Bashir Ahmad Ganaie",
+    "motherName": "Famida Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2009-11-14",
+    "rollNo": "32"
+  },
+  {
+    "admissionNo": "GGHSS-560",
+    "name": "Mir Zuhaib",
+    "fatherName": "Abdul Gaffar Mir",
+    "motherName": "Zahida Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2010-10-05",
+    "rollNo": "33"
+  },
+  {
+    "admissionNo": "GGHSS-561",
+    "name": "Mohammad Arsalan Bhat",
+    "fatherName": "Mushtaq Ahmad Bhat",
+    "motherName": "Bilqeesa Begum",
+    "address": "Azad Gunj Baramulla",
+    "dob": "2009-09-22",
+    "rollNo": "34"
+  },
+  {
+    "admissionNo": "GGHSS-562",
+    "name": "Kumail Abbas Khan",
+    "fatherName": "Imtiyaz Hussain Khan",
+    "motherName": "Gulshana Begum",
+    "address": "Kalampora",
+    "dob": "2008-09-28",
+    "rollNo": "35"
+  },
+  {
+    "admissionNo": "GGHSS-563",
+    "name": "Mysara Jan",
+    "fatherName": "Manzoor Ahmad Dar",
+    "motherName": "Saleema Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2011-08-09",
+    "rollNo": "36"
+  },
+  {
+    "admissionNo": "GGHSS-564",
+    "name": "Harman Jit Singh",
+    "fatherName": "Ajit Pal Singh",
+    "motherName": "Ravinder Kour",
+    "address": "Singhpora Kalan",
+    "dob": "2010-03-10",
+    "rollNo": "37"
+  },
+  {
+    "admissionNo": "GGHSS-565",
+    "name": "Rajneil Singh Bali",
+    "fatherName": "Manjeet Singh Bali",
+    "motherName": "Gurmeet Kour",
+    "address": "Singhpora Kalan",
+    "dob": "2009-12-31",
+    "rollNo": "38"
+  },
+  {
+    "admissionNo": "GGHSS-566",
+    "name": "Nadiya Bashir",
+    "fatherName": "Bashir Ahmad Bhat",
+    "motherName": "Haleema Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2009-10-05",
+    "rollNo": "39"
+  },
+  {
+    "admissionNo": "GGHSS-567",
+    "name": "Muskan Bashir",
+    "fatherName": "Lt. Bashir Ahmad Bhat",
+    "motherName": "Gulshana Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2009-10-15",
+    "rollNo": "40"
+  },
+  {
+    "admissionNo": "GGHSS-568",
+    "name": "Azhar Ali Khan",
+    "fatherName": "Mohammad Afzal Khan",
+    "motherName": "Raja Begum",
+    "address": "Kalampora",
+    "dob": "2010-09-13",
+    "rollNo": "41"
+  },
+  {
+    "admissionNo": "GGHSS-569",
+    "name": "Rehaan Nazir Tantray",
+    "fatherName": "Nazir Ahmad Tantray",
+    "motherName": "Haja Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2010-10-05",
+    "rollNo": "42"
+  },
+  {
+    "admissionNo": "GGHSS-570",
+    "name": "Furqan Bashir",
+    "fatherName": "Bashir Ahmad Sofi",
+    "motherName": "Shafia Begum",
+    "address": "Jahama",
+    "dob": "2011-06-13",
+    "rollNo": "43"
+  },
+  {
+    "admissionNo": "GGHSS-571",
+    "name": "Muneeb ul Islam",
+    "fatherName": "Lateef Ahmad Sofi",
+    "motherName": "Kounsar Begum",
+    "address": "Jahama",
+    "dob": "2011-07-15",
+    "rollNo": "44"
+  },
+  {
+    "admissionNo": "GGHSS-572",
+    "name": "Abuzar Khazir",
+    "fatherName": "Khazir Mohammad Sofi",
+    "motherName": "Shahzada Begum",
+    "address": "Tahama",
+    "dob": "2011-06-07",
+    "rollNo": "45"
+  },
+  {
+    "admissionNo": "GGHSS-573",
+    "name": "Arhaan Javid",
+    "fatherName": "Javid Ahmad Dar",
+    "motherName": "Afroza Javid",
+    "address": "Kanispora",
+    "dob": "2009-07-23",
+    "rollNo": "46"
+  },
+  {
+    "admissionNo": "GGHSS-574",
+    "name": "Gurveer Singh",
+    "fatherName": "Iqbal Singh",
+    "motherName": "Jatinder Kour",
+    "address": "Kanispora",
+    "dob": "2009-07-16",
+    "rollNo": "47"
+  },
+  {
+    "admissionNo": "GGHSS-575",
+    "name": "Ayaan ul Islam",
+    "fatherName": "Mohammad Aslam Kakroo",
+    "motherName": "Yasmeena Akhtar",
+    "address": "Nambla Uri",
+    "dob": "2009-07-29",
+    "rollNo": "48"
+  },
+  {
+    "admissionNo": "GGHSS-576",
+    "name": "Kainat Khan",
+    "fatherName": "Shonkat Ali Khan",
+    "motherName": "Gowhara Khan",
+    "address": "Kalampora Delina",
+    "dob": "2010-08-02",
+    "rollNo": "49"
+  },
+  {
+    "admissionNo": "GGHSS-577",
+    "name": "Arif Rehman Kumar",
+    "fatherName": "Abdul Rehman Kumar",
+    "motherName": "Shakeela Begum",
+    "address": "Singhpora Kalan",
+    "dob": "2011-10-08",
+    "rollNo": "50"
+  }
+];
+
+  function esc(str){ return (str||'').toString().replace(/[&<>"\']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+  function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+  document.getElementById('admDate').value = todayISO();
+
+  let existingAdmissionNumbers = new Set();
+  let existingUsernames = new Set();
+
+  async function init(){
+    try{
+      const snap = await SCHOOL_DOC.get();
+      if(snap.exists){
+        const data = snap.data();
+        (data.students||[]).forEach(s=>{
+          if(s.admissionNo) existingAdmissionNumbers.add(s.admissionNo);
+          if(s.username) existingUsernames.add(s.username);
+        });
+      }
+    }catch(e){
+      document.getElementById('status').className = 'status-err';
+      document.getElementById('status').textContent = 'Could not connect to the database: ' + e.message;
+      return;
+    }
+    renderTable();
+    const btn = document.getElementById('importBtn');
+    btn.disabled = false;
+    btn.textContent = 'Import new students to Admission Register';
+  }
+
+  function renderTable(){
+    const rows = PARSED_STUDENTS.map(s=>{
+      const isDup = existingAdmissionNumbers.has(s.admissionNo);
+      return `<tr class="${isDup?'dup':''}">
+        <td>${esc(s.admissionNo)}</td>
+        <td>${esc(s.name)}</td>
+        <td>${esc(s.fatherName)}</td>
+        <td>${esc(s.motherName)}</td>
+        <td>${esc(s.address)}</td>
+        <td>${esc(s.dob)}</td>
+        <td>${isDup ? 'Already added — skipped' : 'Will be added'}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('tableWrap').innerHTML = `
+      <table>
+        <thead><tr><th>Admission No.</th><th>Name</th><th>Father's Name</th><th>Mother's Name</th><th>Address</th><th>DOB</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p>${PARSED_STUDENTS.filter(s=>!existingAdmissionNumbers.has(s.admissionNo)).length} of ${PARSED_STUDENTS.length} students will be imported.</p>
+    `;
+  }
+
+  document.getElementById('importBtn').onclick = async ()=>{
+    const btn = document.getElementById('importBtn');
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+    const statusEl = document.getElementById('status');
+    statusEl.className = 'status-info';
+    statusEl.textContent = 'Connecting to the database…';
+
+    const section = document.getElementById('sectionSelect').value;
+    const admissionDate = document.getElementById('admDate').value || todayISO();
+
+    try{
+      // Re-fetch the freshest copy right before writing, to minimize overwriting anyone else's concurrent changes.
+      const snap = await SCHOOL_DOC.get();
+      const DB = snap.exists ? snap.data() : null;
+      if(!DB){ throw new Error('The shared database has not been initialized yet — please open the main app at least once first.'); }
+
+      const currentAdmNos = new Set((DB.students||[]).map(s=>s.admissionNo));
+      const currentUsernames = new Set((DB.students||[]).map(s=>s.username));
+      const toImport = PARSED_STUDENTS.filter(s=>!currentAdmNos.has(s.admissionNo));
+
+      let seqBase = DB.students.length;
+      toImport.forEach((s, idx)=>{
+        const seq = (seqBase + idx + 1).toString().padStart(4,'0');
+        let username = ('' + s.name).toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'') || uid('stu');
+        if(currentUsernames.has(username)) username = `${username}.${seq}`;
+        currentUsernames.add(username);
+        const password = 'student' + seq;
+        const sId = uid('s');
+
+        DB.students.push({
+          id: sId,
+          admissionNo: s.admissionNo,
+          name: s.name,
+          fatherName: s.fatherName,
+          motherName: s.motherName,
+          dob: s.dob,
+          className: "11",
+          section: section,
+          address: s.address,
+          contact: "",
+          admissionDate: admissionDate,
+          status: "active",
+          username: username,
+          password: password
+        });
+        DB.admissions.push({
+          id: uid('a'),
+          name: s.name,
+          fatherName: s.fatherName,
+          className: "11",
+          section: section,
+          date: admissionDate,
+          status: "Admitted",
+          studentId: sId
+        });
+      });
+
+      await SCHOOL_DOC.set(DB);
+
+      statusEl.className = 'status-ok';
+      statusEl.textContent = `Done. ${toImport.length} student(s) imported successfully into the Admission Register (Class 11-${section}).\n\nOpen the main app and check Admissions / Students to confirm. Each student's login username/password follow the same pattern as students added through the app itself (e.g. firstname.lastname / studentNNNN) — visible per-student via Edit in the Students section if needed.`;
+      btn.textContent = 'Import complete';
+    }catch(e){
+      statusEl.className = 'status-err';
+      statusEl.textContent = 'Import failed: ' + e.message;
+      btn.disabled = false;
+      btn.textContent = 'Retry import';
+    }
+  };
+
+  init();
+</script>
+</body>
+</html>
