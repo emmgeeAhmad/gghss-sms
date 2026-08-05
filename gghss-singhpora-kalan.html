@@ -287,8 +287,8 @@ const SCHOOL_LOC = "Singhpora Kalan";
 const CLASSES = ["9","10","11","12"];
 const SECTIONS = ["A","B"];
 const SUBJECTS = [
-  "English","Urdu","Hindi","Dogri","Mathematics","Science","Social Science","Environmental Studies",
-  "Computer Science","Physical Education","Agriculture",
+  "English","Urdu","Hindi","Mathematics","Science","Social Science","Environmental Studies",
+  "Computer Science","Physical Education",
   "Physics","Chemistry","Biology","Botany","Zoology","Accountancy","Business Studies","Economics","Statistics",
   "History","Political Science","Geography","Psychology","Sociology","Home Science","Music","Education"
 ];
@@ -451,26 +451,10 @@ async function createAuthAccount({username, email, password, profile, allowExist
 /* ======================= HELPERS ======================= */
 const SENIOR_SECONDARY_CLASSES = ["11","12"];
 const DEFAULT_SUBJECT = "English";
-// Some subjects are a single choice for the student but are actually taught (and marked)
-// by two separate teachers — e.g. a student who picks "Biology" is really taught by a
-// Botany teacher and a Zoology teacher. This map lets a teacher assigned one of the split
-// subjects still see and mark the students who picked the parent subject.
-const SUBJECT_SPLIT_GROUPS = {
-  "Biology": ["Botany","Zoology"]
-};
-function splitSubjectsFor(subject){
-  return SUBJECT_SPLIT_GROUPS[subject] || [subject];
-}
-function studentChoiceMatchesTaughtSubject(studentSubject, taughtSubject){
-  return studentSubject===taughtSubject || splitSubjectsFor(studentSubject).includes(taughtSubject);
-}
 function studentsOf(cls, sec, subject){
   let list = DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
   if(subject && SENIOR_SECONDARY_CLASSES.includes(cls)){
-    list = list.filter(s => {
-      const chosen = [...(Array.isArray(s.subjects) ? s.subjects : []), s.additionalSubject].filter(Boolean);
-      return chosen.some(cs => studentChoiceMatchesTaughtSubject(cs, subject));
-    });
+    list = list.filter(s => (Array.isArray(s.subjects) && s.subjects.includes(subject)) || s.additionalSubject===subject);
   }
   return list;
 }
@@ -499,10 +483,7 @@ function teacherSubjectsFor(u, className, section){
 const PASS_PERCENT = 33;
 function requiredSubjectsFor(student){
   if(SENIOR_SECONDARY_CLASSES.includes(student.className)){
-    const chosen = [...(student.subjects||[]), student.additionalSubject].filter(Boolean);
-    // A split subject (e.g. Biology) is graded by two separate teachers under their own
-    // subject names, so both must have a passing mark recorded for the student to progress.
-    return [...new Set(chosen.flatMap(splitSubjectsFor))];
+    return [...(student.subjects||[]), student.additionalSubject].filter(Boolean);
   }
   // Classes 9-10 don't have a subject-choice list, so use whatever Summative
   // Assessment subjects have actually been recorded for this class-section.
@@ -1390,7 +1371,7 @@ function studentEditModal(s){
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Subjects (English is compulsory — choose 4 more; a 5th is optional: ${1+editSelectedSubjects.length}/6 selected)
+        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+editSelectedSubjects.length}/6 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
@@ -1507,8 +1488,8 @@ function attachStudentsHandlers(){
     if(admissionNo !== s.admissionNo && DB.students.some(x=>x.id!==s.id && x.admissionNo===admissionNo)){
       alert('That admission number is already used by another student.'); return;
     }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length<4){
-      alert('Please choose at least 4 more subjects (English is already compulsory) — the 5th is optional.'); return;
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length!==5){
+      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...editSelectedSubjects]
@@ -1815,14 +1796,12 @@ function attachMarksHandlers(){
 let admFormOpen = false;
 let admState = {className:CLASSES[0], section:SECTIONS[0]};
 let admSelectedSubjects = [];
-let bulkImportOpen = false;
-let bulkImportState = {className:CLASSES[0], section:SECTIONS[0], raw:'', rows:null, importing:false, results:null};
 function admissionsView(){
   const canAdd = hasOfficeAccess(session);
   const list = [...DB.admissions].reverse();
   return `
   <div class="panel">
-    <h2>Admissions register ${canAdd ? `<button class="btn btn-primary" id="addAdmBtn">+ New admission</button> <button class="btn btn-outline" id="bulkImportBtn">Bulk import</button>` : ''}</h2>
+    <h2>Admissions register ${canAdd ? `<button class="btn btn-primary" id="addAdmBtn">+ New admission</button>` : ''}</h2>
     ${list.length===0 ? `<div class="empty"><b>No admissions recorded</b></div>` : `
     <table>
       <thead><tr><th class="idx">#</th><th>Name</th><th>Father's Name</th><th>Class</th><th>Date</th><th>Status</th>${canAdd?'<th></th>':''}</tr></thead>
@@ -1840,8 +1819,7 @@ function admissionsView(){
       </tbody>
     </table>`}
   </div>
-  ${admFormOpen ? admFormModal() : ''}
-  ${bulkImportOpen ? bulkImportModal() : ''}`;
+  ${admFormOpen ? admFormModal() : ''}`;
 }
 function admFormModal(){
   const year = new Date().getFullYear();
@@ -1872,7 +1850,7 @@ function admFormModal(){
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Subjects (English is compulsory — choose 4 more; a 5th is optional: ${1+admSelectedSubjects.length}/6 selected)
+        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+admSelectedSubjects.length}/6 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
@@ -1897,231 +1875,6 @@ function admFormModal(){
     </div>
   </div>`;
 }
-
-/* ---------- Bulk import ---------- */
-const SUBJECT_ALIASES = {
-  "evs":"Environmental Studies", "general english":"English", "eng":"English",
-  "phy":"Physics", "chem":"Chemistry", "bio":"Biology", "p.ed":"Physical Education",
-  "pe":"Physical Education", "pol science":"Political Science", "pol sci":"Political Science",
-  "eco":"Economics", "comp sc":"Computer Science", "computer sc":"Computer Science"
-};
-function normalizeSubjectName(raw){
-  const t = raw.trim();
-  if(!t) return '';
-  const key = t.toLowerCase();
-  if(SUBJECT_ALIASES[key]) return SUBJECT_ALIASES[key];
-  const known = SUBJECTS.find(s=>s.toLowerCase()===key);
-  return known || t;
-}
-function normalizeDob(raw){
-  const t = (raw||'').trim();
-  if(!t) return '';
-  if(/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-  const m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-  if(m){ return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; }
-  return '';
-}
-// Minimal CSV parser: handles quoted fields (so a subjects list containing commas can be
-// wrapped in quotes) and both comma and semicolon as the field delimiter.
-function parseCSV(text){
-  const rows = [];
-  let row = [], field = '', inQuotes = false;
-  const src = text.replace(/\r\n/g,'\n');
-  for(let i=0;i<src.length;i++){
-    const c = src[i];
-    if(inQuotes){
-      if(c==='"'){ if(src[i+1]==='"'){ field+='"'; i++; } else { inQuotes=false; } }
-      else field += c;
-    } else {
-      if(c==='"') inQuotes = true;
-      else if(c===','){ row.push(field); field=''; }
-      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
-      else field += c;
-    }
-  }
-  if(field.length || row.length){ row.push(field); rows.push(row); }
-  return rows.filter(r => r.some(f=>f.trim()!==''));
-}
-function parseBulkImportText(){
-  const raw = bulkImportState.raw;
-  const rawRows = parseCSV(raw);
-  if(rawRows.length===0){ bulkImportState.rows = []; return; }
-  const header = rawRows[0].map(h=>h.trim().toLowerCase());
-  const col = (...names) => { for(const n of names){ const idx = header.indexOf(n); if(idx!==-1) return idx; } return -1; };
-  const iAdm = col('admissionno','admission no','admission no.','adm.no.','ad.no.');
-  const iRoll = col('rollno','roll no','roll no.');
-  const iName = col('name');
-  const iFather = col('fathername',"father's name",'father name');
-  const iMother = col('mothername',"mother's name",'mother name');
-  const iDob = col('dob','date of birth');
-  const iAddress = col('address','residence');
-  const iClass = col('class');
-  const iSection = col('section');
-  const iGender = col('gender');
-  const iContact = col('contact');
-  const iSubjects = col('subjects');
-  const dataRows = (iName===-1 || iAdm===-1) ? rawRows : rawRows.slice(1); // no recognizable header → treat every row as data with defaults
-  const hasHeader = !(iName===-1 || iAdm===-1);
-  bulkImportState.rows = (hasHeader ? rawRows.slice(1) : rawRows).map((r, idx) => {
-    const get = (i) => i===-1 ? '' : (r[i]||'').trim();
-    const className = hasHeader ? (get(iClass) || bulkImportState.className) : bulkImportState.className;
-    const section = hasHeader ? (get(iSection) || bulkImportState.section) : bulkImportState.section;
-    const subjectsRaw = hasHeader ? get(iSubjects) : '';
-    const electives = subjectsRaw
-      ? [...new Set(subjectsRaw.split(/[,;]/).map(normalizeSubjectName).filter(s => s && s!==DEFAULT_SUBJECT))]
-      : [];
-    const rec = {
-      admissionNo: hasHeader ? get(iAdm) : (r[0]||'').trim(),
-      rollNo: hasHeader ? get(iRoll) : '',
-      name: hasHeader ? get(iName) : (r[2]||'').trim(),
-      fatherName: hasHeader ? get(iFather) : '',
-      motherName: hasHeader ? get(iMother) : '',
-      dob: normalizeDob(hasHeader ? get(iDob) : ''),
-      address: hasHeader ? get(iAddress) : '',
-      className, section,
-      gender: hasHeader ? (get(iGender) || 'Female') : 'Female',
-      contact: hasHeader ? get(iContact) : '',
-      electives,
-      _issues: []
-    };
-    if(!rec.admissionNo) rec._issues.push('Missing admission number');
-    if(!rec.name) rec._issues.push('Missing name');
-    if(!rec.fatherName) rec._issues.push("Missing father's name");
-    if(!CLASSES.includes(rec.className)) rec._issues.push(`Unknown class "${rec.className}"`);
-    if(!SECTIONS.includes(rec.section)) rec._issues.push(`Unknown section "${rec.section}"`);
-    if(rec.admissionNo && DB.students.some(s=>s.admissionNo===rec.admissionNo)) rec._issues.push('Admission number already exists — will be skipped');
-    if(SENIOR_SECONDARY_CLASSES.includes(rec.className) && rec.electives.length<4) rec._issues.push(`Only ${rec.electives.length} elective subject(s) found (need at least 4) — will still import, review subjects afterward`);
-    return rec;
-  });
-}
-function bulkImportModal(){
-  const st = bulkImportState;
-  const rows = st.rows;
-  return `
-  <div class="modal-bg" id="bulkModalBg">
-    <div class="modal" style="max-width:900px;">
-      <h3>Bulk import students</h3>
-      ${st.results ? `
-        <div class="note" style="margin-bottom:12px;">
-          Imported <b>${st.results.ok.length}</b> student(s). ${st.results.failed.length ? `<b>${st.results.failed.length}</b> failed or were skipped.` : ''}
-        </div>
-        ${st.results.failed.length ? `
-        <table>
-          <thead><tr><th>Admission No.</th><th>Name</th><th>Reason</th></tr></thead>
-          <tbody>${st.results.failed.map(f=>`<tr><td>${esc(f.admissionNo)}</td><td>${esc(f.name)}</td><td>${esc(f.reason)}</td></tr>`).join('')}</tbody>
-        </table>` : ''}
-        <div style="display:flex;gap:10px;margin-top:14px;">
-          <button class="btn btn-primary" id="bulkClose">Done</button>
-        </div>
-      ` : !rows ? `
-        <div class="note" style="margin-bottom:10px;">
-          Paste rows copied from a spreadsheet, or CSV text. If your data has a header row with columns like
-          <b>AdmissionNo, Name, FatherName, MotherName, DOB, Address, Class, Section, Gender, Subjects</b> it will be
-          used automatically (missing Class/Section columns fall back to the dropdowns below). For Class 11–12 rows,
-          put the electives in the Subjects column separated by commas or semicolons (English is added automatically).
-        </div>
-        <div class="row-inline">
-          <div class="field"><label>Default class (used when a row has no Class column)</label><select id="bulkClass">${CLASSES.map(c=>`<option value="${c}" ${c===st.className?'selected':''}>Class ${c}</option>`).join('')}</select></div>
-          <div class="field"><label>Default section</label><select id="bulkSection">${SECTIONS.map(s=>`<option ${s===st.section?'selected':''}>${s}</option>`).join('')}</select></div>
-        </div>
-        <textarea id="bulkRaw" rows="10" style="width:100%;font-family:monospace;font-size:12px;" placeholder="AdmissionNo,Name,FatherName,MotherName,DOB,Address,Class,Section,Gender,Subjects">${esc(st.raw)}</textarea>
-        <div style="display:flex;gap:10px;margin-top:10px;">
-          <button class="btn btn-primary" id="bulkParse">Preview</button>
-          <button class="btn btn-outline" id="bulkCancel">Cancel</button>
-        </div>
-      ` : `
-        <div class="note" style="margin-bottom:10px;">${rows.length} row(s) parsed. Rows with issues are highlighted; they'll still be imported unless marked "will be skipped" — review before continuing.</div>
-        <div style="max-height:340px;overflow:auto;">
-        <table>
-          <thead><tr><th>Adm. No.</th><th>Name</th><th>Father</th><th>Class</th><th>Sec</th><th>DOB</th><th>Electives</th><th>Issues</th></tr></thead>
-          <tbody>
-            ${rows.map(r=>`
-              <tr style="${r._issues.some(x=>x.includes('skipped') || x.includes('Unknown'))?'background:#fff0f0;':''}">
-                <td>${esc(r.admissionNo)}</td><td>${esc(r.name)}</td><td>${esc(r.fatherName)}</td>
-                <td>${esc(r.className)}</td><td>${esc(r.section)}</td><td>${esc(r.dob)||'—'}</td>
-                <td>${esc(r.electives.join(', '))||'—'}</td>
-                <td style="color:#b33;font-size:12px;">${r._issues.map(esc).join('; ')}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:14px;align-items:center;">
-          <button class="btn btn-primary" id="bulkConfirm" ${st.importing?'disabled':''}>${st.importing ? 'Importing…' : `Import ${rows.filter(r=>!r._issues.some(x=>x.includes('skipped'))).length} student(s)`}</button>
-          <button class="btn btn-outline" id="bulkBack" ${st.importing?'disabled':''}>Back</button>
-        </div>
-        <div id="bulkProgress" class="note" style="margin-top:8px;"></div>
-      `}
-    </div>
-  </div>`;
-}
-async function runBulkImport(){
-  const st = bulkImportState;
-  st.importing = true; render();
-  const progressEl = document.getElementById('bulkProgress');
-  const ok = [], failed = [];
-  const toImport = st.rows.filter(r=>!r._issues.some(x=>x.includes('skipped')));
-  for(let i=0;i<toImport.length;i++){
-    const r = toImport[i];
-    if(progressEl) progressEl.textContent = `Importing ${i+1} of ${toImport.length}: ${r.name}…`;
-    try{
-      const isSenior = SENIOR_SECONDARY_CLASSES.includes(r.className);
-      const subjects = isSenior ? [DEFAULT_SUBJECT, ...r.electives] : [DEFAULT_SUBJECT];
-      const seq = (DB.students.length+1).toString().padStart(4,'0');
-      const sId = uid('s');
-      let username = r.name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'') || uid('stu');
-      if(DB.students.some(s=>s.username===username)) username = `${username}.${r.admissionNo || seq}`;
-      const password = 'student' + seq + Math.random().toString(36).slice(2,5);
-      const email = `${username}@${STUDENT_EMAIL_DOMAIN}`;
-      const authUid = await createAuthAccount({
-        username, email, password,
-        profile: {role:'student', name:r.name, username, linkedId:sId, className:r.className, section:r.section, admissionNo:r.admissionNo}
-      });
-      DB.students.push({
-        id:sId, admissionNo:r.admissionNo, rollNo:r.rollNo||undefined, name:r.name, fatherName:r.fatherName,
-        motherName:r.motherName, dob:r.dob, className:r.className, section:r.section,
-        address:r.address, contact:r.contact, admissionDate: todayISO(), status:'active',
-        username, authUid, subjects, gender:r.gender
-      });
-      DB.admissions.push({id:uid('a'), name:r.name, fatherName:r.fatherName, className:r.className, section:r.section, date: todayISO(), status:'Admitted', studentId:sId});
-      ok.push(r);
-    }catch(e){
-      failed.push({admissionNo:r.admissionNo, name:r.name, reason: e.message || 'Unknown error'});
-    }
-  }
-  st.rows.filter(r=>r._issues.some(x=>x.includes('skipped'))).forEach(r=>{
-    failed.push({admissionNo:r.admissionNo, name:r.name, reason:'Duplicate admission number — skipped'});
-  });
-  await saveDB();
-  st.importing = false;
-  st.results = {ok, failed};
-  render();
-}
-function attachBulkImportHandlers(){
-  const btn = document.getElementById('bulkImportBtn');
-  if(btn) btn.onclick = ()=>{ bulkImportOpen=true; bulkImportState = {className:CLASSES[0], section:SECTIONS[0], raw:'', rows:null, importing:false, results:null}; render(); };
-  const cancel = document.getElementById('bulkCancel');
-  if(cancel) cancel.onclick = ()=>{ bulkImportOpen=false; render(); };
-  const close = document.getElementById('bulkClose');
-  if(close) close.onclick = ()=>{ bulkImportOpen=false; render(); };
-  const back = document.getElementById('bulkBack');
-  if(back) back.onclick = ()=>{ bulkImportState.rows=null; render(); };
-  const classSel = document.getElementById('bulkClass');
-  if(classSel) classSel.onchange = ()=>{ bulkImportState.className = classSel.value; };
-  const sectionSel = document.getElementById('bulkSection');
-  if(sectionSel) sectionSel.onchange = ()=>{ bulkImportState.section = sectionSel.value; };
-  const rawEl = document.getElementById('bulkRaw');
-  if(rawEl) rawEl.onchange = ()=>{ bulkImportState.raw = rawEl.value; };
-  const parseBtn = document.getElementById('bulkParse');
-  if(parseBtn) parseBtn.onclick = ()=>{
-    const rawEl2 = document.getElementById('bulkRaw');
-    bulkImportState.raw = rawEl2 ? rawEl2.value : bulkImportState.raw;
-    if(!bulkImportState.raw.trim()){ alert('Paste some data first.'); return; }
-    parseBulkImportText();
-    render();
-  };
-  const confirmBtn = document.getElementById('bulkConfirm');
-  if(confirmBtn) confirmBtn.onclick = ()=>{ runBulkImport(); };
-}
 function attachAdmissionsHandlers(){
   const addBtn = document.getElementById('addAdmBtn');
   if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; admState={className:CLASSES[0], section:SECTIONS[0]}; admSelectedSubjects=[]; render(); };
@@ -2136,7 +1889,6 @@ function attachAdmissionsHandlers(){
       render();
     };
   });
-  attachBulkImportHandlers();
   document.querySelectorAll('[data-adm-del]').forEach(b=>{
     b.onclick = async ()=>{
       const adm = DB.admissions.find(a=>a.id===b.dataset.admDel);
@@ -2176,8 +1928,8 @@ function attachAdmissionsHandlers(){
     if(!name || !fatherName){ alert('Please enter at least the student and father\'s name.'); return; }
     if(!admissionNo){ alert('Please enter an admission number.'); return; }
     if(DB.students.some(s=>s.admissionNo===admissionNo)){ alert('That admission number is already in use.'); return; }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length<4){
-      alert('Please choose at least 4 more subjects (English is already compulsory) — the 5th is optional.'); return;
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length!==5){
+      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...admSelectedSubjects]
