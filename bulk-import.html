@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GGHSS Singhpora Kalan · Bulk Student Import</title>
+<style>
+  :root{ --bg:#f6f7fb; --card:#fff; --ink:#1a1d29; --muted:#666; --accent:#2d6cdf; --danger:#c0392b; --border:#e3e6ec; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  header{background:#1f2937;color:#fff;padding:18px 16px;}
+  header h1{margin:0;font-size:18px;}
+  header p{margin:4px 0 0;font-size:13px;opacity:.8;}
+  main{max-width:760px;margin:0 auto;padding:16px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;}
+  .card h2{margin:0 0 12px;font-size:16px;}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px;}
+  input[type=text],input[type=password]{width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:15px;margin-bottom:12px;}
+  input[type=file]{display:block;width:100%;margin-bottom:12px;}
+  button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:10px 16px;font-size:14px;cursor:pointer;}
+  button.secondary{background:#fff;color:var(--accent);border:1px solid var(--accent);}
+  button:disabled{opacity:.5;cursor:default;}
+  .note{font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;}
+  .error{color:var(--danger);font-size:13px;margin:8px 0;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th,td{border-bottom:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top;}
+  tr.bad{background:#fff3f2;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#334;font-size:12px;margin-left:8px;}
+  .hidden{display:none;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  a.dl{color:var(--accent);font-weight:600;}
+  .scroll{max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:6px;}
+  .progress{font-size:13px;margin-top:10px;color:var(--muted);}
+</style>
+</head>
+<body>
+<header>
+  <h1>GGHSS Singhpora Kalan — Bulk Student Import</h1>
+  <p>Log in, pick your CSV files, review, import. Writes straight to the same database as the main app.</p>
+</header>
+<main>
+
+  <div class="card" id="loginCard">
+    <h2>1. Log in</h2>
+    <div class="note">Use the same username &amp; password you use in the main app (needs office/admissions access).</div>
+    <label>Username</label>
+    <input type="text" id="loginUser" autocomplete="username">
+    <label>Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password">
+    <div class="row">
+      <button id="loginBtn">Log in</button>
+      <span id="loginStatus" class="pill hidden"></span>
+    </div>
+    <div id="loginError" class="error"></div>
+  </div>
+
+  <div class="card hidden" id="importCard">
+    <h2>2. Choose CSV file(s)</h2>
+    <div class="note">
+      Pick one or more CSV files (you can select all three class files at once on most phones —
+      tap the field, then long-press / use "select multiple" in your file picker).
+      Each file must start with a header row like
+      <code>AdmissionNo,RollNo,Name,FatherName,MotherName,DOB,Address,Class,Section,Subjects</code>.
+    </div>
+    <input type="file" id="csvFiles" accept=".csv,text/csv" multiple>
+    <div class="row">
+      <button id="parseBtn">Preview</button>
+    </div>
+    <div id="parseError" class="error"></div>
+  </div>
+
+  <div class="card hidden" id="previewCard">
+    <h2>3. Review <span id="rowCount" class="pill"></span></h2>
+    <div class="note">Rows highlighted in red will be skipped (fix the CSV and re-pick the file if needed).</div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Adm.No.</th><th>Name</th><th>Father</th><th>Class</th><th>Sec</th><th>DOB</th><th>Electives</th><th>Issues</th></tr></thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button id="importBtn">Import</button>
+      <button class="secondary" id="backBtn">Choose different file(s)</button>
+    </div>
+    <div id="progress" class="progress"></div>
+  </div>
+
+  <div class="card hidden" id="resultsCard">
+    <h2>4. Done</h2>
+    <div id="resultsSummary"></div>
+    <div class="scroll" id="failedWrap"></div>
+    <div style="margin-top:14px;" id="downloadWrap"></div>
+    <div class="row" style="margin-top:14px;">
+      <button class="secondary" id="restartBtn">Import more files</button>
+    </div>
+  </div>
+
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+/* Same Firebase project as the main app. This is the public web config
+   (not a secret) — it's already embedded in the main app's HTML. */
+const firebaseConfig = {
+  apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
+  authDomain: "gghss-singhpora-kalan-sms.firebaseapp.com",
+  projectId: "gghss-singhpora-kalan-sms",
+  storageBucket: "gghss-singhpora-kalan-sms.firebasestorage.app",
+  messagingSenderId: "1001470406359",
+  appId: "1:1001470406359:web:b3c277b667da5263bb0a92",
+  measurementId: "G-GRLC5GMK15"
+};
+firebase.initializeApp(firebaseConfig);
+const firestoreDB = firebase.firestore();
+const auth = firebase.auth();
+const secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary-' + Date.now());
+const secondaryAuth = secondaryApp.auth();
+const SCHOOL_DOC = firestoreDB.collection('school').doc('main');
+const STUDENT_EMAIL_DOMAIN = 'gghss-students.local';
+
+const CLASSES = ["9","10","11","12"];
+const SECTIONS = ["A","B"];
+const SENIOR_SECONDARY_CLASSES = ["11","12"];
+const DEFAULT_SUBJECT = "English";
+
+function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function normalizeDob(v){
+  if(!v) return '';
+  const t = v.trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if(m){ return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; }
+  return '';
+}
+function normalizeSubjectName(s){ return (s||'').trim(); }
+
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  const src = text.replace(/\r\n/g,'\n');
+  for(let i=0;i<src.length;i++){
+    const c = src[i];
+    if(inQuotes){
+      if(c==='"'){ if(src[i+1]==='"'){ field+='"'; i++; } else { inQuotes=false; } }
+      else field += c;
+    } else {
+      if(c==='"') inQuotes = true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(f=>f.trim()!==''));
+}
+
+function parseFileText(raw){
+  const rawRows = parseCSV(raw);
+  if(rawRows.length===0) return [];
+  const header = rawRows[0].map(h=>h.trim().toLowerCase());
+  const col = (...names) => { for(const n of names){ const idx = header.indexOf(n); if(idx!==-1) return idx; } return -1; };
+  const iAdm = col('admissionno','admission no','admission no.','adm.no.','ad.no.');
+  const iRoll = col('rollno','roll no','roll no.');
+  const iName = col('name');
+  const iFather = col('fathername',"father's name",'father name');
+  const iMother = col('mothername',"mother's name",'mother name');
+  const iDob = col('dob','date of birth');
+  const iAddress = col('address','residence');
+  const iClass = col('class');
+  const iSection = col('section');
+  const iGender = col('gender');
+  const iContact = col('contact');
+  const iSubjects = col('subjects');
+  const hasHeader = !(iName===-1 || iAdm===-1);
+  const dataRows = hasHeader ? rawRows.slice(1) : rawRows;
+  return dataRows.map(r => {
+    const get = (i) => i===-1 ? '' : (r[i]||'').trim();
+    const className = hasHeader ? get(iClass) : '';
+    const section = hasHeader ? get(iSection) : '';
+    const subjectsRaw = hasHeader ? get(iSubjects) : '';
+    const electives = subjectsRaw
+      ? [...new Set(subjectsRaw.split(/[,;]/).map(normalizeSubjectName).filter(s => s && s!==DEFAULT_SUBJECT))]
+      : [];
+    const rec = {
+      admissionNo: hasHeader ? get(iAdm) : (r[0]||'').trim(),
+      rollNo: hasHeader ? get(iRoll) : '',
+      name: hasHeader ? get(iName) : (r[2]||'').trim(),
+      fatherName: hasHeader ? get(iFather) : '',
+      motherName: hasHeader ? get(iMother) : '',
+      dob: normalizeDob(hasHeader ? get(iDob) : ''),
+      address: hasHeader ? get(iAddress) : '',
+      className, section,
+      gender: hasHeader ? (get(iGender) || 'Female') : 'Female',
+      contact: hasHeader ? get(iContact) : '',
+      electives,
+      _issues: []
+    };
+    if(!rec.admissionNo) rec._issues.push('Missing admission number');
+    if(!rec.name) rec._issues.push('Missing name');
+    if(!rec.fatherName) rec._issues.push("Missing father's name");
+    if(!CLASSES.includes(rec.className)) rec._issues.push(`Unknown class "${rec.className}"`);
+    if(!SECTIONS.includes(rec.section)) rec._issues.push(`Unknown section "${rec.section}"`);
+    return rec;
+  });
+}
+
+async function createAuthAccount({username, email, password, profile}){
+  const idxSnap = await firestoreDB.collection('usernameIndex').doc(username).get();
+  if(idxSnap.exists){ throw new Error('That username is already taken.'); }
+  const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+  const authUid = cred.user.uid;
+  try{
+    await firestoreDB.collection('profiles').doc(authUid).set(profile);
+    await firestoreDB.collection('usernameIndex').doc(username).set({email, uid: authUid});
+  } finally {
+    await secondaryAuth.signOut();
+  }
+  return authUid;
+}
+
+/* ---------- state ---------- */
+let allRows = [];
+let existingAdmNos = new Set();
+
+/* ---------- login ---------- */
+document.getElementById('loginBtn').onclick = async () => {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!u || !p){ errEl.textContent = 'Enter your username and password.'; return; }
+  try{
+    const idxSnap = await firestoreDB.collection('usernameIndex').doc(u).get();
+    if(!idxSnap.exists) throw new Error('WRONG');
+    const email = idxSnap.data().email;
+    await auth.signInWithEmailAndPassword(email, p);
+    document.getElementById('loginStatus').textContent = 'Logged in as ' + u;
+    document.getElementById('loginStatus').classList.remove('hidden');
+    document.getElementById('importCard').classList.remove('hidden');
+    document.getElementById('loginBtn').disabled = true;
+  }catch(e){
+    errEl.textContent = 'Incorrect username, password, or account not found.';
+  }
+};
+
+/* ---------- parse ---------- */
+document.getElementById('parseBtn').onclick = async () => {
+  const files = document.getElementById('csvFiles').files;
+  const errEl = document.getElementById('parseError');
+  errEl.textContent = '';
+  if(!files.length){ errEl.textContent = 'Choose at least one CSV file.'; return; }
+
+  try{
+    const snap = await SCHOOL_DOC.get();
+    if(!snap.exists){ errEl.textContent = 'school/main not found — open the main app once first.'; return; }
+    const DB = snap.data();
+    existingAdmNos = new Set((DB.students||[]).map(s=>s.admissionNo));
+  }catch(e){
+    errEl.textContent = 'Could not read the database: ' + e.message;
+    return;
+  }
+
+  allRows = [];
+  for(const f of files){
+    const text = await f.text();
+    const rows = parseFileText(text);
+    rows.forEach(r => r._file = f.name);
+    allRows = allRows.concat(rows);
+  }
+  allRows.forEach(r => {
+    if(r.admissionNo && existingAdmNos.has(r.admissionNo)){
+      r._issues.push('Admission number already exists — will be skipped');
+    }
+  });
+
+  document.getElementById('rowCount').textContent = allRows.length + ' row(s)';
+  const tbody = document.getElementById('previewBody');
+  tbody.innerHTML = allRows.map(r => `
+    <tr class="${r._issues.length ? 'bad' : ''}">
+      <td>${esc(r.admissionNo)}</td><td>${esc(r.name)}</td><td>${esc(r.fatherName)}</td>
+      <td>${esc(r.className)}</td><td>${esc(r.section)}</td><td>${esc(r.dob)||'—'}</td>
+      <td>${esc(r.electives.join(', '))||'—'}</td>
+      <td style="color:#b33;">${r._issues.map(esc).join('; ')}</td>
+    </tr>`).join('');
+
+  document.getElementById('previewCard').classList.remove('hidden');
+  document.getElementById('resultsCard').classList.add('hidden');
+};
+
+document.getElementById('backBtn').onclick = () => {
+  document.getElementById('previewCard').classList.add('hidden');
+};
+
+/* ---------- import ---------- */
+document.getElementById('importBtn').onclick = async () => {
+  const importBtn = document.getElementById('importBtn');
+  const progressEl = document.getElementById('progress');
+  importBtn.disabled = true;
+
+  const snap = await SCHOOL_DOC.get();
+  const DB = snap.data();
+  DB.students = DB.students || [];
+  DB.admissions = DB.admissions || [];
+
+  const toImport = allRows.filter(r => !r._issues.some(x => x.includes('skipped') || x.includes('Missing') || x.includes('Unknown')));
+  const ok = [], failed = [];
+  const credentialsOut = [['AdmissionNo','Name','Username','Password']];
+
+  for(let i=0;i<toImport.length;i++){
+    const r = toImport[i];
+    progressEl.textContent = `Importing ${i+1} of ${toImport.length}: ${r.name}…`;
+    try{
+      const isSenior = SENIOR_SECONDARY_CLASSES.includes(r.className);
+      const subjects = isSenior ? [DEFAULT_SUBJECT, ...r.electives] : [DEFAULT_SUBJECT];
+      const seq = (DB.students.length+1).toString().padStart(4,'0');
+      const sId = uid('s');
+      let username = r.name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'') || uid('stu');
+      if(DB.students.some(s=>s.username===username)) username = `${username}.${r.admissionNo || seq}`;
+      const password = 'student' + seq + Math.random().toString(36).slice(2,5);
+      const email = `${username}@${STUDENT_EMAIL_DOMAIN}`;
+      const authUid = await createAuthAccount({
+        username, email, password,
+        profile:{role:'student', name:r.name, username, linkedId:sId, className:r.className, section:r.section, admissionNo:r.admissionNo}
+      });
+      DB.students.push({
+        id:sId, admissionNo:r.admissionNo, rollNo:r.rollNo||undefined, name:r.name, fatherName:r.fatherName,
+        motherName:r.motherName, dob:r.dob, className:r.className, section:r.section,
+        address:r.address, contact:r.contact, admissionDate: todayISO(), status:'active',
+        username, authUid, subjects, gender:r.gender
+      });
+      DB.admissions.push({id:uid('a'), name:r.name, fatherName:r.fatherName, className:r.className, section:r.section, date: todayISO(), status:'Admitted', studentId:sId});
+
+      // Save after every row so a dropped connection doesn't lose earlier progress.
+      await SCHOOL_DOC.set(DB);
+
+      ok.push(r);
+      credentialsOut.push([r.admissionNo, r.name, username, password]);
+    }catch(e){
+      failed.push({admissionNo:r.admissionNo, name:r.name, reason: e.message || 'Unknown error'});
+    }
+  }
+
+  allRows.filter(r => r._issues.some(x=>x.includes('skipped') || x.includes('Missing') || x.includes('Unknown')))
+    .forEach(r => failed.push({admissionNo:r.admissionNo, name:r.name, reason:r._issues.join('; ')}));
+
+  progressEl.textContent = '';
+  document.getElementById('previewCard').classList.add('hidden');
+  document.getElementById('resultsCard').classList.remove('hidden');
+  document.getElementById('resultsSummary').innerHTML =
+    `Imported <b>${ok.length}</b> student(s). ${failed.length ? `<b>${failed.length}</b> failed or were skipped.` : ''}`;
+
+  const failedWrap = document.getElementById('failedWrap');
+  failedWrap.innerHTML = failed.length ? `
+    <table>
+      <thead><tr><th>Adm.No.</th><th>Name</th><th>Reason</th></tr></thead>
+      <tbody>${failed.map(f=>`<tr><td>${esc(f.admissionNo)}</td><td>${esc(f.name)}</td><td>${esc(f.reason)}</td></tr>`).join('')}</tbody>
+    </table>` : '';
+
+  const downloadWrap = document.getElementById('downloadWrap');
+  if(credentialsOut.length > 1){
+    const csvText = credentialsOut.map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvText], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    downloadWrap.innerHTML = `<a class="dl" href="${url}" download="credentials-${Date.now()}.csv">Download login credentials for the ${ok.length} new student(s)</a>
+      <div class="note">Save this somewhere private and hand out the logins, then delete the file.</div>`;
+  } else {
+    downloadWrap.innerHTML = '';
+  }
+
+  importBtn.disabled = false;
+};
+
+document.getElementById('restartBtn').onclick = () => {
+  document.getElementById('resultsCard').classList.add('hidden');
+  document.getElementById('csvFiles').value = '';
+  allRows = [];
+};
+</script>
+</body>
+</html>
