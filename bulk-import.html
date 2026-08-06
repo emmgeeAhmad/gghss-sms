@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk Import Students — GGHSS Singhpora Kalan</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#F6F1E4;color:#2A2A26;margin:0;padding:20px;}
+  h1{font-size:20px;color:#1B3A5C;}
+  .note{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;margin-bottom:16px;font-size:13.5px;line-height:1.7;}
+  textarea{width:100%;box-sizing:border-box;min-height:180px;padding:10px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:12.5px;margin-bottom:14px;}
+  table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-bottom:16px;}
+  th,td{border:1px solid #ddd;padding:5px 7px;text-align:left;}
+  th{background:#1B3A5C;color:#fff;position:sticky;top:0;}
+  tr.dup{background:#fdecea;color:#999;}
+  tr.err{background:#fff3cd;}
+  .btn{background:#1B3A5C;color:#fff;border:none;padding:12px 22px;border-radius:5px;font-size:15px;cursor:pointer;font-weight:600;}
+  .btn:disabled{background:#999;cursor:not-allowed;}
+  #status{margin-top:16px;padding:12px;border-radius:5px;font-size:14px;white-space:pre-wrap;}
+  .status-ok{background:#e6f4ea;color:#1e7a34;}
+  .status-err{background:#fdecea;color:#b3261e;}
+  .status-info{background:#eaf1fb;color:#1B3A5C;}
+  .tablewrap{max-height:420px;overflow:auto;border:1px solid #ddd;}
+</style>
+</head>
+<body>
+<h1>Bulk Import Students</h1>
+<div class="note">
+  Paste CSV data below — same format as the school's admission register export:<br>
+  <code>AdmissionNo,RollNo,Name,FatherName,MotherName,DOB,Address,Class,Section,Subjects</code><br><br>
+  • DOB should be <b>DD-MM-YYYY</b> (or leave blank if unknown)<br>
+  • <b>Subjects</b> only matters for Class 11/12 — comma-separated inside quotes if it contains commas, e.g. <code>"English, Physics, Chemistry, Biology, EVS"</code>. Leave blank for Class 9/10.<br>
+  • Students already in the system (matched by Admission No.) are automatically detected and skipped — safe to paste the same list twice.<br>
+  • Works entirely against your live database — this connects directly to the same shared data the main app uses.
+</div>
+
+<textarea id="csvInput" placeholder="Paste CSV here, including the header row..."></textarea>
+<button class="btn" id="previewBtn">Preview</button>
+
+<div id="previewWrap"></div>
+<button class="btn" id="importBtn" style="display:none;margin-top:10px;">Import these students</button>
+<div id="status"></div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
+    authDomain: "gghss-singhpora-kalan-sms.firebaseapp.com",
+    projectId: "gghss-singhpora-kalan-sms",
+    storageBucket: "gghss-singhpora-kalan-sms.firebasestorage.app",
+    messagingSenderId: "1001470406359",
+    appId: "1:1001470406359:web:b3c277b667da5263bb0a92",
+    measurementId: "G-GRLC5GMK15"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const auth = firebase.auth();
+  const SCHOOL_DOC = db.collection('school').doc('main');
+  const STUDENT_EMAIL_DOMAIN = 'gghss-students.local';
+  const secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary');
+  const secondaryAuth = secondaryApp.auth();
+
+  function esc(str){ return (str||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // Minimal CSV parser that handles quoted fields containing commas.
+  function parseCSV(text){
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    const clean = text.replace(/\r\n/g, '\n');
+    for(let i=0; i<clean.length; i++){
+      const c = clean[i];
+      if(inQuotes){
+        if(c === '"'){
+          if(clean[i+1] === '"'){ field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else {
+        if(c === '"') inQuotes = true;
+        else if(c === ','){ row.push(field); field=''; }
+        else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+        else field += c;
+      }
+    }
+    if(field.length || row.length){ row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(c => c.trim() !== ''));
+  }
+
+  function normalizeSubject(s){
+    s = s.trim();
+    const map = {
+      'EVS':'Environmental Studies', 'General English':'English', 'Political Science':'Political Science',
+      'Home Science':'Home Science'
+    };
+    return map[s] || s;
+  }
+  function toISODate(d){
+    d = (d||'').trim();
+    if(!d) return '';
+    const m = d.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if(!m) return '';
+    return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  }
+  function usernameFromName(name, seq){
+    let u = name.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'');
+    return u || ('student'+seq);
+  }
+
+  let parsedRows = [];
+  let existingAdmNos = new Set();
+  let existingUsernames = new Set();
+
+  document.getElementById('previewBtn').onclick = async ()=>{
+    const raw = document.getElementById('csvInput').value.trim();
+    if(!raw){ alert('Please paste CSV data first.'); return; }
+    const rows = parseCSV(raw);
+    if(rows.length < 2){ alert('No data rows found.'); return; }
+    const header = rows[0].map(h=>h.trim().toLowerCase());
+    const idx = (name)=> header.indexOf(name);
+    const iAdm = idx('admissionno'), iName = idx('name'), iFather = idx('fathername'),
+          iMother = idx('mothername'), iDob = idx('dob'), iAddr = idx('address'),
+          iClass = idx('class'), iSection = idx('section'), iSubjects = idx('subjects');
+    if(iAdm<0 || iName<0 || iClass<0){
+      alert('CSV must at least have AdmissionNo, Name, and Class columns.');
+      return;
+    }
+
+    const statusEl = document.getElementById('status');
+    statusEl.className = 'status-info';
+    statusEl.textContent = 'Checking existing records…';
+    try{
+      const snap = await SCHOOL_DOC.get();
+      existingAdmNos = new Set();
+      existingUsernames = new Set();
+      if(snap.exists){
+        const data = snap.data();
+        (data.students||[]).forEach(s=>{
+          if(s.admissionNo) existingAdmNos.add(String(s.admissionNo).trim());
+          if(s.username) existingUsernames.add(s.username);
+        });
+      }
+    }catch(e){
+      statusEl.className = 'status-err';
+      statusEl.textContent = 'Could not reach the database: ' + e.message;
+      return;
+    }
+    statusEl.textContent = '';
+
+    parsedRows = rows.slice(1).map(r=>{
+      const admissionNo = (r[iAdm]||'').trim();
+      const name = (r[iName]||'').trim();
+      const fatherName = iFather>=0 ? (r[iFather]||'').trim() : '';
+      const motherName = iMother>=0 ? (r[iMother]||'').trim() : '';
+      const dob = iDob>=0 ? toISODate(r[iDob]) : '';
+      const address = iAddr>=0 ? (r[iAddr]||'').trim() : '';
+      const className = (r[iClass]||'').trim();
+      const section = iSection>=0 ? (r[iSection]||'A').trim() || 'A' : 'A';
+      const subjRaw = iSubjects>=0 ? (r[iSubjects]||'').trim() : '';
+      const subjectsList = subjRaw ? subjRaw.split(',').map(s=>normalizeSubject(s)).filter(Boolean) : [];
+      const isDup = existingAdmNos.has(admissionNo);
+      return {admissionNo, name, fatherName, motherName, dob, address, className, section, subjectsList, isDup, valid: !!(admissionNo && name && className)};
+    });
+
+    renderPreview();
+  };
+
+  function renderPreview(){
+    const willImport = parsedRows.filter(r=>r.valid && !r.isDup).length;
+    let html = `<div class="tablewrap"><table><thead><tr>
+      <th>Adm No.</th><th>Name</th><th>Father's Name</th><th>DOB</th><th>Class-Sec</th><th>Subjects</th><th>Status</th>
+    </tr></thead><tbody>`;
+    parsedRows.forEach(r=>{
+      const cls = r.isDup ? 'dup' : (!r.valid ? 'err' : '');
+      const statusText = r.isDup ? 'Already exists — skipped' : (!r.valid ? 'Missing required field — skipped' : 'Will import');
+      html += `<tr class="${cls}">
+        <td>${esc(r.admissionNo)}</td><td>${esc(r.name)}</td><td>${esc(r.fatherName)}</td>
+        <td>${esc(r.dob)}</td><td>${esc(r.className)}-${esc(r.section)}</td>
+        <td>${esc(r.subjectsList.join(', '))}</td><td>${statusText}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div><p>${willImport} of ${parsedRows.length} row(s) will be imported.</p>`;
+    document.getElementById('previewWrap').innerHTML = html;
+    document.getElementById('importBtn').style.display = willImport>0 ? 'inline-block' : 'none';
+  }
+
+  document.getElementById('importBtn').onclick = async ()=>{
+    const btn = document.getElementById('importBtn');
+    btn.disabled = true; btn.textContent = 'Importing…';
+    const statusEl = document.getElementById('status');
+    statusEl.className = 'status-info';
+    statusEl.textContent = 'Importing…';
+
+    try{
+      const snap = await SCHOOL_DOC.get();
+      const DB = snap.exists ? snap.data() : null;
+      if(!DB){ throw new Error('The shared database has not been initialized yet — open the main app at least once first.'); }
+      if(!DB.students) DB.students = [];
+      if(!DB.admissions) DB.admissions = [];
+
+      const toImport = parsedRows.filter(r=>r.valid && !DB.students.some(s=>String(s.admissionNo).trim()===r.admissionNo));
+      let successCount = 0, errorCount = 0;
+      let credentialsList = [];
+
+      for(let i=0; i<toImport.length; i++){
+        const r = toImport[i];
+        const seq = (DB.students.length + i + 1).toString().padStart(4,'0');
+        let username = usernameFromName(r.name, seq);
+        if(DB.students.some(s=>s.username===username) || existingUsernames.has(username)) username = `${username}.${seq}`;
+        existingUsernames.add(username);
+        const password = 'student' + seq;
+        const sId = 's_' + Math.random().toString(36).slice(2,9);
+        const email = `${username}@${STUDENT_EMAIL_DOMAIN}`;
+
+        try{
+          const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+          const uid = cred.user.uid;
+          const isSenior = (r.className==='11' || r.className==='12');
+          await db.collection('profiles').doc(uid).set({
+            role:'student', name:r.name, username, linkedId:sId, className:r.className, section:r.section,
+            admissionNo:r.admissionNo
+          });
+          await db.collection('usernameIndex').doc(username).set({email, uid});
+          await secondaryAuth.signOut();
+
+          const studentRecord = {
+            id:sId, admissionNo:r.admissionNo, name:r.name, fatherName:r.fatherName, motherName:r.motherName,
+            dob:r.dob, className:r.className, section:r.section, address:r.address, contact:'',
+            admissionDate: new Date().toISOString().slice(0,10), status:'active', username, authUid:uid
+          };
+          if(isSenior && r.subjectsList.length){
+            const withoutEnglish = r.subjectsList.filter(s=>s!=='English');
+            studentRecord.subjects = ['English', ...withoutEnglish.slice(0,5)];
+            if(withoutEnglish.length > 5) studentRecord.additionalSubject = withoutEnglish[5];
+          }
+          DB.students.push(studentRecord);
+          DB.admissions.push({
+            id:'a_'+Math.random().toString(36).slice(2,9), name:r.name, fatherName:r.fatherName,
+            className:r.className, section:r.section, date:studentRecord.admissionDate, status:'Admitted', studentId:sId
+          });
+          credentialsList.push(`${r.name}: ${username} / ${password}`);
+          successCount++;
+        }catch(e){
+          errorCount++;
+          console.error('Failed for', r.name, e);
+        }
+      }
+
+      await SCHOOL_DOC.set(DB);
+
+      statusEl.className = errorCount ? 'status-err' : 'status-ok';
+      statusEl.textContent = `Done. ${successCount} student(s) imported, ${errorCount} failed.\n\nLogins created:\n` + credentialsList.join('\n');
+      btn.textContent = 'Import complete';
+    }catch(e){
+      statusEl.className = 'status-err';
+      statusEl.textContent = 'Import failed: ' + e.message;
+      btn.disabled = false; btn.textContent = 'Import these students';
+    }
+  };
+</script>
+</body>
+</html>
