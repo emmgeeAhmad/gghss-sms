@@ -1293,6 +1293,15 @@ function attachStaffHandlers(){
       return;
     }
 
+    // Re-fetch the freshest copy right before writing, since the account
+    // creation above took a moment and the live sync listener may have
+    // refreshed local data in the meantime — working from a stale copy
+    // here could silently overwrite other changes.
+    try{
+      const freshSnap = await SCHOOL_DOC.get();
+      if(freshSnap.exists) DB = freshSnap.data();
+    }catch(e){ /* fall back to current in-memory DB if this fails */ }
+    if(!DB.users) DB.users = [];
     DB.users.push(newUser);
     await saveDB();
     staffFormOpen=false; render();
@@ -1956,6 +1965,15 @@ function attachAdmissionsHandlers(){
       saveBtn.disabled = false; saveBtn.textContent = 'Admit student';
       return;
     }
+
+    // Re-fetch the freshest copy right before writing (see note in the
+    // staff-add handler above — avoids silently overwriting concurrent changes).
+    try{
+      const freshSnap = await SCHOOL_DOC.get();
+      if(freshSnap.exists) DB = freshSnap.data();
+    }catch(e){ /* fall back to current in-memory DB if this fails */ }
+    if(!DB.students) DB.students = [];
+    if(!DB.admissions) DB.admissions = [];
 
     DB.students.push({
       id:sId, admissionNo, name, fatherName, motherName, dob, className, section,
