@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Repair Missing Staff/Student Records — GGHSS Singhpora Kalan</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;background:#F6F1E4;color:#2A2A26;margin:0;padding:20px;}
+  h1{font-size:20px;color:#1B3A5C;}
+  .note{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;margin-bottom:16px;font-size:13.5px;line-height:1.7;}
+  table{width:100%;border-collapse:collapse;background:#fff;font-size:12.5px;margin-bottom:16px;}
+  th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;}
+  th{background:#1B3A5C;color:#fff;}
+  .btn{background:#1B3A5C;color:#fff;border:none;padding:12px 22px;border-radius:5px;font-size:15px;cursor:pointer;font-weight:600;}
+  .btn:disabled{background:#999;cursor:not-allowed;}
+  #status{margin-top:16px;padding:12px;border-radius:5px;font-size:14px;white-space:pre-wrap;}
+  .status-ok{background:#e6f4ea;color:#1e7a34;}
+  .status-err{background:#fdecea;color:#b3261e;}
+  .status-info{background:#eaf1fb;color:#1B3A5C;}
+</style>
+</head>
+<body>
+<h1>Repair Missing Staff / Student Records</h1>
+<div class="note">
+  Use this if someone's real login exists (created successfully, so re-adding them says "email already in use"),
+  but they don't actually appear in the app's Staff or Student lists. This reconstructs their record from their
+  existing login profile — it does <b>not</b> create any new logins, so it's safe to run even if some accounts
+  are already listed correctly (those get skipped automatically).
+</div>
+
+<div id="content"><p>Scanning profiles…</p></div>
+<button class="btn" id="repairBtn" disabled>Scanning…</button>
+<div id="status"></div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
+    authDomain: "gghss-singhpora-kalan-sms.firebaseapp.com",
+    projectId: "gghss-singhpora-kalan-sms",
+    storageBucket: "gghss-singhpora-kalan-sms.firebasestorage.app",
+    messagingSenderId: "1001470406359",
+    appId: "1:1001470406359:web:b3c277b667da5263bb0a92",
+    measurementId: "G-GRLC5GMK15"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const SCHOOL_DOC = db.collection('school').doc('main');
+
+  function esc(str){ return (str||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  let missingStaff = [];
+  let missingStudents = [];
+
+  async function init(){
+    const snap = await SCHOOL_DOC.get();
+    if(!snap.exists){
+      document.getElementById('content').innerHTML = '<p>No data found in the shared database.</p>';
+      return;
+    }
+    const DB = snap.data();
+    const existingUsernames = new Set([
+      ...(DB.users||[]).map(u=>u.username),
+      ...(DB.students||[]).map(s=>s.username)
+    ]);
+
+    const profilesSnap = await db.collection('profiles').get();
+    const usernameIndexSnap = await db.collection('usernameIndex').get();
+    const emailByUsername = {};
+    usernameIndexSnap.forEach(doc => { emailByUsername[doc.id] = doc.data().email; });
+
+    missingStaff = [];
+    missingStudents = [];
+    profilesSnap.forEach(doc=>{
+      const p = doc.data();
+      const authUid = doc.id;
+      if(!p.username || existingUsernames.has(p.username)) return; // already listed correctly
+      if(p.role === 'student'){
+        missingStudents.push({authUid, ...p});
+      } else if(['principal','teacher','office','accounts'].includes(p.role)){
+        missingStaff.push({authUid, email: emailByUsername[p.username] || '', ...p});
+      }
+    });
+
+    renderTable();
+    const btn = document.getElementById('repairBtn');
+    btn.disabled = (missingStaff.length + missingStudents.length) === 0;
+    btn.textContent = btn.disabled ? 'Nothing to repair' : 'Repair these records';
+  }
+
+  function renderTable(){
+    let html = '';
+    if(missingStaff.length){
+      html += `<h2>Missing staff (${missingStaff.length})</h2><table>
+        <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Email</th></tr></thead><tbody>
+        ${missingStaff.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.username)}</td><td>${esc(s.role)}</td><td>${esc(s.email)}</td></tr>`).join('')}
+        </tbody></table>`;
+    }
+    if(missingStudents.length){
+      html += `<h2>Missing students (${missingStudents.length})</h2>
+      <p style="font-size:12.5px;color:#8a2c22;">Note: profiles only store name, class, section and admission number —
+      not father's/mother's name, DOB, address or contact. Recovered students will have those fields blank; edit them
+      afterward, or re-import from your original CSV for full accuracy.</p>
+      <table>
+        <thead><tr><th>Name</th><th>Username</th><th>Class</th><th>Admission No.</th></tr></thead><tbody>
+        ${missingStudents.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.username)}</td><td>${esc(s.className)}-${esc(s.section)}</td><td>${esc(s.admissionNo)}</td></tr>`).join('')}
+        </tbody></table>`;
+    }
+    if(!html) html = '<p><b>Nothing missing.</b> Every profile already has a matching record.</p>';
+    document.getElementById('content').innerHTML = html;
+  }
+
+  document.getElementById('repairBtn').onclick = async ()=>{
+    const btn = document.getElementById('repairBtn');
+    btn.disabled = true; btn.textContent = 'Repairing…';
+    const statusEl = document.getElementById('status');
+    statusEl.className = 'status-info';
+    statusEl.textContent = 'Repairing…';
+    try{
+      const snap = await SCHOOL_DOC.get();
+      const DB = snap.data();
+      if(!DB.users) DB.users = [];
+      if(!DB.students) DB.students = [];
+
+      missingStaff.forEach(s=>{
+        const record = {id: s.linkedId || ('u_'+Math.random().toString(36).slice(2,9)), username:s.username, role:s.role, name:s.name, email:s.email, authUid:s.authUid};
+        if(s.role==='teacher'){
+          record.designation = s.designation || 'Teacher';
+          record.assignments = s.assignments || [];
+          record.officeAccess = !!s.officeAccess;
+        }
+        DB.users.push(record);
+      });
+      missingStudents.forEach(s=>{
+        DB.students.push({
+          id: s.linkedId || ('s_'+Math.random().toString(36).slice(2,9)),
+          admissionNo: s.admissionNo || '', name: s.name, fatherName:'', motherName:'', dob:'',
+          className: s.className, section: s.section, address:'', contact:'',
+          admissionDate: new Date().toISOString().slice(0,10), status:'active',
+          username: s.username, authUid: s.authUid
+        });
+      });
+
+      await SCHOOL_DOC.set(DB);
+      statusEl.className = 'status-ok';
+      statusEl.textContent = `Repaired ${missingStaff.length} staff and ${missingStudents.length} student record(s). Open the main app to confirm.`;
+      btn.textContent = 'Repair complete';
+    }catch(e){
+      statusEl.className = 'status-err';
+      statusEl.textContent = 'Repair failed: ' + e.message;
+      btn.disabled = false; btn.textContent = 'Repair these records';
+    }
+  };
+
+  init();
+</script>
+</body>
+</html>
