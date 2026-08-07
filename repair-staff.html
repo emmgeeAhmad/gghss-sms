@@ -6,6 +6,7 @@
 <title>Repair Missing Staff/Student Records — GGHSS Singhpora Kalan</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   body{font-family:system-ui,-apple-system,sans-serif;background:#F6F1E4;color:#2A2A26;margin:0;padding:20px;}
   h1{font-size:20px;color:#1B3A5C;}
@@ -19,20 +20,33 @@
   .status-ok{background:#e6f4ea;color:#1e7a34;}
   .status-err{background:#fdecea;color:#b3261e;}
   .status-info{background:#eaf1fb;color:#1B3A5C;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px;}
+  .field input{width:100%;padding:9px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:14px;}
+  #mainWrap{display:none;}
 </style>
 </head>
 <body>
 <h1>Repair Missing Staff / Student Records</h1>
 <div class="note">
-  Use this if someone's real login exists (created successfully, so re-adding them says "email already in use"),
-  but they don't actually appear in the app's Staff or Student lists. This reconstructs their record from their
-  existing login profile — it does <b>not</b> create any new logins, so it's safe to run even if some accounts
-  are already listed correctly (those get skipped automatically).
+  Use this if someone's real login exists (so re-adding them says "email already in use"), but they don't
+  actually appear in the app's Staff or Student lists. This reconstructs their record from their existing
+  login profile — it does <b>not</b> create any new logins.
 </div>
 
-<div id="content"><p>Scanning profiles…</p></div>
-<button class="btn" id="repairBtn" disabled>Scanning…</button>
-<div id="status"></div>
+<div id="loginWrap">
+  <div class="note">Your database now requires a login to read anything — sign in as Principal first.</div>
+  <div class="field"><label>Principal email</label><input id="loginEmail" type="email"></div>
+  <div class="field"><label>Password</label><input id="loginPassword" type="password"></div>
+  <button class="btn" id="loginBtn">Sign in</button>
+  <div id="loginStatus"></div>
+</div>
+
+<div id="mainWrap">
+  <div id="content"><p>Scanning profiles…</p></div>
+  <button class="btn" id="repairBtn" disabled>Scanning…</button>
+  <div id="status"></div>
+</div>
 
 <script>
   const firebaseConfig = {
@@ -46,12 +60,28 @@
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+  const auth = firebase.auth();
   const SCHOOL_DOC = db.collection('school').doc('main');
 
   function esc(str){ return (str||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   let missingStaff = [];
   let missingStudents = [];
+
+  document.getElementById('loginBtn').onclick = async ()=>{
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const loginStatus = document.getElementById('loginStatus');
+    if(!email || !password){ loginStatus.textContent = 'Please enter both fields.'; return; }
+    try{
+      await auth.signInWithEmailAndPassword(email, password);
+      document.getElementById('loginWrap').style.display = 'none';
+      document.getElementById('mainWrap').style.display = 'block';
+      init();
+    }catch(e){
+      loginStatus.textContent = 'Sign-in failed: ' + e.message;
+    }
+  };
 
   async function init(){
     const snap = await SCHOOL_DOC.get();
@@ -75,7 +105,7 @@
     profilesSnap.forEach(doc=>{
       const p = doc.data();
       const authUid = doc.id;
-      if(!p.username || existingUsernames.has(p.username)) return; // already listed correctly
+      if(!p.username || existingUsernames.has(p.username)) return;
       if(p.role === 'student'){
         missingStudents.push({authUid, ...p});
       } else if(['principal','teacher','office','accounts'].includes(p.role)){
@@ -152,8 +182,6 @@
       btn.disabled = false; btn.textContent = 'Repair these records';
     }
   };
-
-  init();
 </script>
 </body>
 </html>
