@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fix My Staff Record — GGHSS Singhpora Kalan</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#F6F1E4;color:#2A2A26;margin:0;padding:20px;max-width:520px;}
+h1{font-size:20px;color:#1B3A5C;}
+.note{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;margin-bottom:16px;font-size:13.5px;line-height:1.7;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12px;font-weight:600;color:#555;margin-bottom:4px;}
+.field input{width:100%;padding:9px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;font-size:14px;}
+.btn{background:#1B3A5C;color:#fff;border:none;padding:12px 22px;border-radius:5px;font-size:15px;cursor:pointer;font-weight:600;width:100%;}
+.btn:disabled{background:#999;}
+#status{margin-top:16px;padding:12px;border-radius:5px;font-size:13.5px;white-space:pre-wrap;}
+.status-ok{background:#e6f4ea;color:#1e7a34;}
+.status-err{background:#fdecea;color:#b3261e;}
+.status-info{background:#eaf1fb;color:#1B3A5C;}
+</style>
+</head>
+<body>
+<h1>Fix My Staff Record</h1>
+<div class="note">
+Use this if you can log in to the main app and it lets you do your normal job, but the Principal's
+"Manage Staff" list doesn't show you. This signs you in with your existing password, reads your existing
+profile to find your role and name, and restores your entry in the staff list if it's missing.
+It does not create a new login and does not change your password.
+</div>
+<div class="field"><label>Username</label><input id="username" placeholder="the username you log in with"></div>
+<div class="field"><label>Email (leave blank if you're not sure — we'll try to look it up from your username)</label><input id="email" type="email" placeholder="optional"></div>
+<div class="field"><label>Your current password</label><input id="password" type="password"></div>
+<button class="btn" id="goBtn">Sign in and fix my staff record</button>
+<div id="status"></div>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCJmwNeRUXvT4nxOOutyt0kaSkLI9sFe5A",
+  authDomain: "gghss-singhpora-kalan-sms.firebaseapp.com",
+  projectId: "gghss-singhpora-kalan-sms",
+  storageBucket: "gghss-singhpora-kalan-sms.firebasestorage.app",
+  messagingSenderId: "1001470406359",
+  appId: "1:1001470406359:web:b3c277b667da5263bb0a92",
+  measurementId: "G-GRLC5GMK15"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+const SCHOOL_DOC = db.collection('school').doc('main');
+const STUDENT_EMAIL_DOMAIN = 'gghss-students.local';
+
+document.getElementById('goBtn').onclick = async ()=>{
+  const btn = document.getElementById('goBtn');
+  const statusEl = document.getElementById('status');
+  const username = document.getElementById('username').value.trim();
+  let email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  if(!username){ statusEl.className='status-err'; statusEl.textContent='Please enter your username.'; return; }
+  if(!password){ statusEl.className='status-err'; statusEl.textContent='Please enter your password.'; return; }
+  btn.disabled = true; btn.textContent = 'Working…';
+  statusEl.className = 'status-info';
+  statusEl.textContent = 'Looking up your account…';
+  try{
+    if(!email){
+      const idxSnap = await db.collection('usernameIndex').doc(username).get();
+      if(idxSnap.exists && idxSnap.data().email){
+        email = idxSnap.data().email;
+      } else {
+        statusEl.className='status-err';
+        statusEl.textContent = "Couldn't find an email for that username automatically. Please fill in the Email field above and try again.";
+        btn.disabled = false; btn.textContent = 'Sign in and fix my staff record';
+        return;
+      }
+    }
+
+    statusEl.textContent = 'Signing in…';
+    const cred = await auth.signInWithEmailAndPassword(email, password);
+    const uid = cred.user.uid;
+
+    statusEl.textContent = 'Reading your existing profile…';
+    const profSnap = await db.collection('profiles').doc(uid).get();
+    if(!profSnap.exists){
+      statusEl.className='status-err';
+      statusEl.textContent = "Signed in successfully, but couldn't find an existing profile for this login — so there's nothing to recover from. Please tell your Principal so they can add you as staff instead.";
+      btn.disabled = false; btn.textContent = 'Sign in and fix my staff record';
+      return;
+    }
+    const profile = profSnap.data();
+    if(profile.role==='student'){
+      statusEl.className='status-err';
+      statusEl.textContent = "This login is registered as a student account, not staff, so this tool can't help here.";
+      btn.disabled = false; btn.textContent = 'Sign in and fix my staff record';
+      return;
+    }
+
+    statusEl.textContent = 'Checking the staff list…';
+    const snap = await SCHOOL_DOC.get();
+    let DB = snap.exists ? snap.data() : {
+      users:[], students:[], admissions:[], attendance:{}, marks:{}, certificates:[],
+      reportCards:[], assignments:[], circulars:[], accountEntries:[], approvals:[]
+    };
+    if(!DB.users) DB.users = [];
+
+    let record = DB.users.find(u => u.authUid===uid || u.id===profile.linkedId || u.username===profile.username);
+    let wasMissing = false;
+    if(!record){
+      wasMissing = true;
+      record = {id: profile.linkedId || ('u_' + Math.random().toString(36).slice(2,9))};
+      DB.users.push(record);
+    }
+    record.username = profile.username || username;
+    record.role = profile.role;
+    record.name = record.name || profile.name || profile.username || username;
+    record.authUid = uid;
+    delete record.password;
+
+    await SCHOOL_DOC.set(DB);
+    await auth.signOut();
+
+    statusEl.className = 'status-ok';
+    statusEl.textContent = (wasMissing ? 'Restored! ' : 'Already present — refreshed just in case. ')
+      + `Your role: ${profile.role}. Open the main app and log in as usual — you should now show up under Manage Staff.`;
+    btn.textContent = 'Done';
+  }catch(e){
+    statusEl.className = 'status-err';
+    statusEl.textContent = 'Failed: ' + e.message + (e.code ? ' (' + e.code + ')' : '');
+    btn.disabled = false; btn.textContent = 'Sign in and fix my staff record';
+  }
+};
+</script>
+</body>
+</html>
