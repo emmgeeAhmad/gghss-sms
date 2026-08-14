@@ -287,11 +287,14 @@ const SCHOOL_LOC = "Singhpora Kalan";
 const CLASSES = ["9","10","11","12"];
 const SECTIONS = ["A","B"];
 const SUBJECTS = [
-  "English","Urdu","Hindi","Mathematics","Science","Social Science","Environmental Studies",
+  "English","Urdu","Hindi","Kashmiri","Punjabi","Mathematics","Science","Social Science","Environmental Studies",
   "Computer Science","Physical Education",
   "Physics","Chemistry","Biology","Botany","Zoology","Accountancy","Business Studies","Economics","Statistics",
   "History","Political Science","Geography","Psychology","Sociology","Home Science","Music","Education"
 ];
+const LANGUAGE_CHOICES_1 = ["Urdu","Hindi","Punjabi"];
+const LANGUAGE_CHOICES_2 = ["Kashmiri","Hindi","Punjabi"];
+const JUNIOR_CORE_SUBJECTS = ["English","Mathematics","Science","Social Science"];
 const EXAMS = ["Formative Assessment 1","Formative Assessment 2","Formative Assessment 3","Formative Assessment 4","Formative Assessment 5","Formative Assessment 6","Co-Curricular","Summative Assessment"];
 const DESIGNATIONS = [
   "Teacher","Master","Lecturer","Senior Lecturer",
@@ -450,11 +453,24 @@ async function createAuthAccount({username, email, password, profile, allowExist
 
 /* ======================= HELPERS ======================= */
 const SENIOR_SECONDARY_CLASSES = ["11","12"];
+const JUNIOR_CLASSES = ["9","10"];
 const DEFAULT_SUBJECT = "English";
+// Botany and Zoology are both taught as part of "Biology" for a student's
+// subject choice, split between two teachers — so a student who chose
+// "Biology" should show up for whichever of the two a teacher is assigned.
+const SUBJECT_EQUIVALENTS = {
+  "Botany": ["Botany","Biology"],
+  "Zoology": ["Zoology","Biology"]
+};
+function studentTakesSubject(s, subject){
+  const mySubjects = Array.isArray(s.subjects) ? s.subjects : [];
+  const candidates = SUBJECT_EQUIVALENTS[subject] || [subject];
+  return candidates.some(c => mySubjects.includes(c) || s.additionalSubject===c);
+}
 function studentsOf(cls, sec, subject){
   let list = DB.students.filter(s => s.status!=='left' && s.className===cls && (!sec || s.section===sec));
-  if(subject && SENIOR_SECONDARY_CLASSES.includes(cls)){
-    list = list.filter(s => (Array.isArray(s.subjects) && s.subjects.includes(subject)) || s.additionalSubject===subject);
+  if(subject && (SENIOR_SECONDARY_CLASSES.includes(cls) || JUNIOR_CLASSES.includes(cls))){
+    list = list.filter(s => studentTakesSubject(s, subject));
   }
   return list;
 }
@@ -1309,15 +1325,21 @@ function attachStaffHandlers(){
 }
 
 /* ======================= STUDENTS ======================= */
-let studentFilter = {className:'', q:''};
+let studentFilter = {className:'', q:'', sort:'name'};
 let studentEditId = null;
 let editState = {className:''};
 let editSelectedSubjects = [];
+let editLang1 = LANGUAGE_CHOICES_1[0];
+let editLang2Enabled = false;
+let editLang2 = LANGUAGE_CHOICES_2[0];
 function studentsView(){
   const canEdit = hasOfficeAccess(session);
   let list = DB.students.filter(s=>s.status!=='left');
   if(studentFilter.className) list = list.filter(s=>s.className===studentFilter.className);
   if(studentFilter.q) list = list.filter(s=> s.name.toLowerCase().includes(studentFilter.q.toLowerCase()) || s.admissionNo.toLowerCase().includes(studentFilter.q.toLowerCase()));
+  if(studentFilter.sort==='name') list.sort((a,b)=>a.name.localeCompare(b.name));
+  else if(studentFilter.sort==='admissionNo') list.sort((a,b)=>a.admissionNo.localeCompare(b.admissionNo, undefined, {numeric:true}));
+  else if(studentFilter.sort==='admissionDate') list.sort((a,b)=>(a.admissionDate||'').localeCompare(b.admissionDate||''));
   const editing = studentEditId ? DB.students.find(s=>s.id===studentEditId) : null;
 
   return `
@@ -1328,6 +1350,13 @@ function studentsView(){
         <select id="stuClassFilter"><option value="">All classes</option>${CLASSES.map(c=>`<option value="${c}" ${studentFilter.className===c?'selected':''}>Class ${c}</option>`).join('')}</select>
       </div>
       <div class="field"><label>Search</label><input id="stuSearch" placeholder="Name or admission no." value="${esc(studentFilter.q)}"></div>
+      <div class="field"><label>Sort by</label>
+        <select id="stuSort">
+          <option value="name" ${studentFilter.sort==='name'?'selected':''}>Name (A–Z)</option>
+          <option value="admissionNo" ${studentFilter.sort==='admissionNo'?'selected':''}>Admission Number</option>
+          <option value="admissionDate" ${studentFilter.sort==='admissionDate'?'selected':''}>Date of Admission</option>
+        </select>
+      </div>
     </div>
     ${list.length===0 ? `<div class="empty"><b>No students found</b>Try a different class or search term.</div>` : `
     <table>
@@ -1355,6 +1384,7 @@ function studentEditModal(s){
   const fullEdit = true;
   const editClassName = editState.className || s.className;
   const isSenior = SENIOR_SECONDARY_CLASSES.includes(editClassName);
+  const isJunior = JUNIOR_CLASSES.includes(editClassName);
   return `
   <div class="modal-bg" id="stuModalBg">
     <div class="modal">
@@ -1392,6 +1422,22 @@ function studentEditModal(s){
             ${esc(sub)}
           </label>`).join('')}
       </div>` : ''}
+      ${isJunior ? `
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">Subjects</label>
+      <div class="note" style="margin-bottom:10px;">English, Mathematics, Science and Social Science are compulsory for every student.</div>
+      <div class="field"><label>First language</label>
+        <select id="seLang1">${LANGUAGE_CHOICES_1.map(l=>`<option value="${l}" ${l===editLang1?'selected':''}>${l}</option>`).join('')}</select>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;margin-bottom:8px;">
+        <input type="checkbox" id="seLang2Enabled" ${editLang2Enabled?'checked':''} style="width:16px;height:16px;">
+        This student is also taking a 6th subject (a second language)
+      </label>
+      <div class="field" style="margin-bottom:16px;">
+        <label>Second language</label>
+        <select id="seLang2" ${editLang2Enabled?'':'disabled'}>
+          ${LANGUAGE_CHOICES_2.filter(l=>l!==editLang1).map(l=>`<option value="${l}" ${l===editLang2?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="field"><label>Address</label><input id="seAddress" value="${esc(s.address)}"></div>
       <div class="field"><label>Student login username</label><input value="${esc(s.username||'')}" disabled></div>
       ${session.role==='principal' ? `<button type="button" class="btn btn-outline" id="seResetLogin" style="margin-bottom:10px;">Reset this student's login (creates a new password)</button>` : ''}
@@ -1409,11 +1455,21 @@ function attachStudentsHandlers(){
   if(cf) cf.onchange = ()=>{ studentFilter.className=cf.value; render(); };
   const sq = document.getElementById('stuSearch');
   if(sq) sq.oninput = ()=>{ studentFilter.q=sq.value; render(); };
+  const sortSel = document.getElementById('stuSort');
+  if(sortSel) sortSel.onchange = ()=>{ studentFilter.sort=sortSel.value; render(); };
   document.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{
     studentEditId=b.dataset.edit;
     const s = DB.students.find(x=>x.id===studentEditId);
     editState = {className: s ? s.className : CLASSES[0]};
-    editSelectedSubjects = (s && Array.isArray(s.subjects)) ? [...s.subjects] : [];
+    editSelectedSubjects = (s && Array.isArray(s.subjects)) ? s.subjects.filter(sub=>sub!==DEFAULT_SUBJECT) : [];
+    if(s && JUNIOR_CLASSES.includes(s.className) && Array.isArray(s.subjects)){
+      const langsInUse = s.subjects.filter(sub=>!JUNIOR_CORE_SUBJECTS.includes(sub) && sub!==DEFAULT_SUBJECT);
+      editLang1 = langsInUse[0] || LANGUAGE_CHOICES_1[0];
+      if(langsInUse[1]){ editLang2Enabled = true; editLang2 = langsInUse[1]; }
+      else { editLang2Enabled = false; editLang2 = LANGUAGE_CHOICES_2.find(l=>l!==editLang1) || LANGUAGE_CHOICES_2[0]; }
+    } else {
+      editLang1 = LANGUAGE_CHOICES_1[0]; editLang2Enabled = false; editLang2 = LANGUAGE_CHOICES_2[0];
+    }
     render();
   });
   document.querySelectorAll('[data-remove]').forEach(b=> b.onclick=async ()=>{
@@ -1438,6 +1494,7 @@ function attachStudentsHandlers(){
   if(seClassSel) seClassSel.onchange = ()=>{
     editState.className = seClassSel.value;
     if(!SENIOR_SECONDARY_CLASSES.includes(editState.className)) editSelectedSubjects=[];
+    if(!JUNIOR_CLASSES.includes(editState.className)){ editLang1=LANGUAGE_CHOICES_1[0]; editLang2Enabled=false; editLang2=LANGUAGE_CHOICES_2[0]; }
     render();
   };
   document.querySelectorAll('.editSubjectCb').forEach(cb=>{
@@ -1447,6 +1504,12 @@ function attachStudentsHandlers(){
       render();
     };
   });
+  const seLang1Sel = document.getElementById('seLang1');
+  if(seLang1Sel) seLang1Sel.onchange = ()=>{ editLang1=seLang1Sel.value; if(editLang2===editLang1) editLang2=LANGUAGE_CHOICES_2.find(l=>l!==editLang1); render(); };
+  const seLang2EnabledCb = document.getElementById('seLang2Enabled');
+  if(seLang2EnabledCb) seLang2EnabledCb.onchange = ()=>{ editLang2Enabled=seLang2EnabledCb.checked; render(); };
+  const seLang2Sel = document.getElementById('seLang2');
+  if(seLang2Sel) seLang2Sel.onchange = ()=>{ editLang2=seLang2Sel.value; };
   const cancel = document.getElementById('seCancel');
   if(cancel) cancel.onclick = ()=>{ studentEditId=null; render(); };
   const resetLoginBtn = document.getElementById('seResetLogin');
@@ -1502,7 +1565,9 @@ function attachStudentsHandlers(){
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...editSelectedSubjects]
-      : [DEFAULT_SUBJECT];
+      : JUNIOR_CLASSES.includes(className)
+        ? [...JUNIOR_CORE_SUBJECTS, editLang1, ...(editLang2Enabled ? [editLang2] : [])]
+        : [DEFAULT_SUBJECT];
 
     const changes = {name, contact, fatherName, motherName, dob, admissionNo, className, section, address, subjects, gender};
 
@@ -1805,6 +1870,9 @@ function attachMarksHandlers(){
 let admFormOpen = false;
 let admState = {className:CLASSES[0], section:SECTIONS[0]};
 let admSelectedSubjects = [];
+let admLang1 = LANGUAGE_CHOICES_1[0];
+let admLang2Enabled = false;
+let admLang2 = LANGUAGE_CHOICES_2[0];
 function admissionsView(){
   const canAdd = hasOfficeAccess(session);
   const list = [...DB.admissions].reverse();
@@ -1835,6 +1903,7 @@ function admFormModal(){
   const seq = (DB.students.length+1).toString().padStart(4,'0');
   const suggestedAdmNo = `GGHSS-${year}-${seq}`;
   const isSenior = SENIOR_SECONDARY_CLASSES.includes(admState.className || CLASSES[0]);
+  const isJunior = JUNIOR_CLASSES.includes(admState.className || CLASSES[0]);
   return `
   <div class="modal-bg" id="admModalBg">
     <div class="modal">
@@ -1871,6 +1940,22 @@ function admFormModal(){
             ${esc(s)}
           </label>`).join('')}
       </div>` : ''}
+      ${isJunior ? `
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">Subjects</label>
+      <div class="note" style="margin-bottom:10px;">English, Mathematics, Science and Social Science are compulsory for every student.</div>
+      <div class="field"><label>First language</label>
+        <select id="afLang1">${LANGUAGE_CHOICES_1.map(l=>`<option value="${l}" ${l===admLang1?'selected':''}>${l}</option>`).join('')}</select>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;margin-bottom:8px;">
+        <input type="checkbox" id="afLang2Enabled" ${admLang2Enabled?'checked':''} style="width:16px;height:16px;">
+        This student is also taking a 6th subject (a second language)
+      </label>
+      <div class="field" style="margin-bottom:16px;">
+        <label>Second language</label>
+        <select id="afLang2" ${admLang2Enabled?'':'disabled'}>
+          ${LANGUAGE_CHOICES_2.filter(l=>l!==admLang1).map(l=>`<option value="${l}" ${l===admLang2?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="field"><label>Address</label><input id="afAddress" placeholder="Singhpora Kalan"></div>
       <div class="row-inline">
         <div class="field"><label>Student login username</label><input id="afUser" placeholder="auto-generated if blank"></div>
@@ -1886,9 +1971,14 @@ function admFormModal(){
 }
 function attachAdmissionsHandlers(){
   const addBtn = document.getElementById('addAdmBtn');
-  if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; admState={className:CLASSES[0], section:SECTIONS[0]}; admSelectedSubjects=[]; render(); };
+  if(addBtn) addBtn.onclick = ()=>{ admFormOpen=true; admState={className:CLASSES[0], section:SECTIONS[0]}; admSelectedSubjects=[]; admLang1=LANGUAGE_CHOICES_1[0]; admLang2Enabled=false; admLang2=LANGUAGE_CHOICES_2[0]; render(); };
   const afClassSel = document.getElementById('afClass');
-  if(afClassSel) afClassSel.onchange = ()=>{ admState.className=afClassSel.value; if(!SENIOR_SECONDARY_CLASSES.includes(admState.className)){ admSelectedSubjects=[]; } render(); };
+  if(afClassSel) afClassSel.onchange = ()=>{
+    admState.className=afClassSel.value;
+    if(!SENIOR_SECONDARY_CLASSES.includes(admState.className)){ admSelectedSubjects=[]; }
+    if(!JUNIOR_CLASSES.includes(admState.className)){ admLang1=LANGUAGE_CHOICES_1[0]; admLang2Enabled=false; admLang2=LANGUAGE_CHOICES_2[0]; }
+    render();
+  };
   const afSectionSel = document.getElementById('afSection');
   if(afSectionSel) afSectionSel.onchange = ()=>{ admState.section=afSectionSel.value; };
   document.querySelectorAll('.admSubjectCb').forEach(cb=>{
@@ -1898,6 +1988,12 @@ function attachAdmissionsHandlers(){
       render();
     };
   });
+  const afLang1Sel = document.getElementById('afLang1');
+  if(afLang1Sel) afLang1Sel.onchange = ()=>{ admLang1=afLang1Sel.value; if(admLang2===admLang1) admLang2=LANGUAGE_CHOICES_2.find(l=>l!==admLang1); render(); };
+  const afLang2EnabledCb = document.getElementById('afLang2Enabled');
+  if(afLang2EnabledCb) afLang2EnabledCb.onchange = ()=>{ admLang2Enabled=afLang2EnabledCb.checked; render(); };
+  const afLang2Sel = document.getElementById('afLang2');
+  if(afLang2Sel) afLang2Sel.onchange = ()=>{ admLang2=afLang2Sel.value; };
   document.querySelectorAll('[data-adm-del]').forEach(b=>{
     b.onclick = async ()=>{
       const adm = DB.admissions.find(a=>a.id===b.dataset.admDel);
@@ -1942,7 +2038,9 @@ function attachAdmissionsHandlers(){
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...admSelectedSubjects]
-      : [DEFAULT_SUBJECT];
+      : JUNIOR_CLASSES.includes(className)
+        ? [...JUNIOR_CORE_SUBJECTS, admLang1, ...(admLang2Enabled ? [admLang2] : [])]
+        : [DEFAULT_SUBJECT];
     const seq = (DB.students.length+1).toString().padStart(4,'0');
     const sId = uid('s');
     let username = document.getElementById('afUser').value.trim();
@@ -2092,26 +2190,33 @@ function attachCertificatesHandlers(){
 }
 function certBodyText(rec, student){
   const clsLine = `Class ${student.className}-${student.section}`;
+  const isMale = student.gender === 'Male';
+  const p = {
+    child: isMale ? 'son' : 'daughter',
+    She: isMale ? 'He' : 'She',
+    Her: isMale ? 'His' : 'Her',
+    her: isMale ? 'his' : 'her'
+  };
   if(rec.type==='Bonafide Certificate'){
-    return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+    return `This is to certify that <b>${esc(student.name)}</b>, ${p.child} of Sh. ${esc(student.fatherName)},
     is a bona fide student of this institution, currently studying in ${clsLine} for the academic session ${new Date().getFullYear()}.
-    Her admission number is <b>${esc(student.admissionNo)}</b> and her date of birth, as recorded in the school register, is ${fmtDate(student.dob)}.
+    ${p.Her} admission number is <b>${esc(student.admissionNo)}</b> and ${p.her} date of birth, as recorded in the school register, is ${fmtDate(student.dob)}.
     ${rec.reason ? `This certificate is issued ${esc(rec.reason)}.` : 'This certificate is issued on request for whatever purpose it may serve.'}`;
   }
   if(rec.type==='Transfer Certificate'){
-    return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+    return `This is to certify that <b>${esc(student.name)}</b>, ${p.child} of Sh. ${esc(student.fatherName)},
     admission number <b>${esc(student.admissionNo)}</b>, was a student of this school and was studying in ${clsLine}
-    at the time of leaving. Her date of birth as per the school register is ${fmtDate(student.dob)}, and her conduct
-    during her time at this institution was satisfactory. She is hereby relieved from the rolls of this school
+    at the time of leaving. ${p.Her} date of birth as per the school register is ${fmtDate(student.dob)}, and ${p.her} conduct
+    during ${p.her} time at this institution was satisfactory. ${p.She} is hereby relieved from the rolls of this school
     with effect from ${fmtDate(todayISO())}. ${rec.reason ? `Reason for leaving: ${esc(rec.reason)}.` : ''}`;
   }
   if(rec.type==='Character Certificate'){
-    return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+    return `This is to certify that <b>${esc(student.name)}</b>, ${p.child} of Sh. ${esc(student.fatherName)},
     a student of ${clsLine}, admission number <b>${esc(student.admissionNo)}</b>, bears a good moral character.
-    During her association with this institution, her conduct and behaviour have been found satisfactory.
+    During ${p.her} association with this institution, ${p.her} conduct and behaviour have been found satisfactory.
     ${rec.reason ? `This certificate is issued ${esc(rec.reason)}.` : 'This certificate is issued on request.'}`;
   }
-  return `This is to certify that <b>${esc(student.name)}</b>, daughter of Sh. ${esc(student.fatherName)},
+  return `This is to certify that <b>${esc(student.name)}</b>, ${p.child} of Sh. ${esc(student.fatherName)},
   admission number <b>${esc(student.admissionNo)}</b>, is provisionally certified as a student of ${clsLine} of this
   institution for the academic session ${new Date().getFullYear()}, pending completion of final records.
   ${rec.reason ? `Issued ${esc(rec.reason)}.` : ''}`;
