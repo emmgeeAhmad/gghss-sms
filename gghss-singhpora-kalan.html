@@ -464,6 +464,10 @@ const SUBJECT_EQUIVALENTS = {
 };
 function studentTakesSubject(s, subject){
   const mySubjects = Array.isArray(s.subjects) ? s.subjects : [];
+  // If this student's subject data hasn't been filled in yet (e.g. recovered
+  // from a login profile that never had it), don't hide them from every
+  // teacher — show them until their subjects are properly recorded.
+  if(mySubjects.length===0 && !s.additionalSubject) return true;
   const candidates = SUBJECT_EQUIVALENTS[subject] || [subject];
   return candidates.some(c => mySubjects.includes(c) || s.additionalSubject===c);
 }
@@ -1410,7 +1414,7 @@ function studentEditModal(s){
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+editSelectedSubjects.length}/6 selected)
+        Subjects (English is compulsory — choose 4 more to make 5 total: ${1+editSelectedSubjects.length}/5 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
@@ -1418,7 +1422,7 @@ function studentEditModal(s){
         </label>
         ${SUBJECTS.filter(sub=>sub!==DEFAULT_SUBJECT).map(sub=>`
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;">
-            <input type="checkbox" class="editSubjectCb" value="${esc(sub)}" ${editSelectedSubjects.includes(sub)?'checked':''} ${(!editSelectedSubjects.includes(sub) && editSelectedSubjects.length>=5)?'disabled':''}>
+            <input type="checkbox" class="editSubjectCb" value="${esc(sub)}" ${editSelectedSubjects.includes(sub)?'checked':''} ${(!editSelectedSubjects.includes(sub) && editSelectedSubjects.length>=4)?'disabled':''}>
             ${esc(sub)}
           </label>`).join('')}
       </div>` : ''}
@@ -1560,8 +1564,8 @@ function attachStudentsHandlers(){
     if(admissionNo !== s.admissionNo && DB.students.some(x=>x.id!==s.id && x.admissionNo===admissionNo)){
       alert('That admission number is already used by another student.'); return;
     }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length!==5){
-      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && editSelectedSubjects.length!==4){
+      alert('Please choose exactly 4 more subjects (English is already compulsory) — 5 total.'); return;
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...editSelectedSubjects]
@@ -1928,7 +1932,7 @@ function admFormModal(){
       </div>
       ${isSenior ? `
       <label style="display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
-        Subjects (English is compulsory — choose 5 more to make 6 total: ${1+admSelectedSubjects.length}/6 selected)
+        Subjects (English is compulsory — choose 4 more to make 5 total: ${1+admSelectedSubjects.length}/5 selected)
       </label>
       <div class="row-inline" style="flex-wrap:wrap;gap:8px 16px;margin-bottom:16px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;opacity:.7;">
@@ -1936,7 +1940,7 @@ function admFormModal(){
         </label>
         ${SUBJECTS.filter(s=>s!==DEFAULT_SUBJECT).map(s=>`
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;min-width:140px;">
-            <input type="checkbox" class="admSubjectCb" value="${esc(s)}" ${admSelectedSubjects.includes(s)?'checked':''} ${(!admSelectedSubjects.includes(s) && admSelectedSubjects.length>=5)?'disabled':''}>
+            <input type="checkbox" class="admSubjectCb" value="${esc(s)}" ${admSelectedSubjects.includes(s)?'checked':''} ${(!admSelectedSubjects.includes(s) && admSelectedSubjects.length>=4)?'disabled':''}>
             ${esc(s)}
           </label>`).join('')}
       </div>` : ''}
@@ -2033,8 +2037,8 @@ function attachAdmissionsHandlers(){
     if(!name || !fatherName){ alert('Please enter at least the student and father\'s name.'); return; }
     if(!admissionNo){ alert('Please enter an admission number.'); return; }
     if(DB.students.some(s=>s.admissionNo===admissionNo)){ alert('That admission number is already in use.'); return; }
-    if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length!==5){
-      alert('Please choose exactly 5 more subjects (English is already compulsory) — 6 total.'); return;
+    if(SENIOR_SECONDARY_CLASSES.includes(className) && admSelectedSubjects.length!==4){
+      alert('Please choose exactly 4 more subjects (English is already compulsory) — 5 total.'); return;
     }
     const subjects = SENIOR_SECONDARY_CLASSES.includes(className)
       ? [DEFAULT_SUBJECT, ...admSelectedSubjects]
